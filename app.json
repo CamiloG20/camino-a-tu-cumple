@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Camino a tu cumple🎂💌",
+    "slug": "camino-a-tu-cumple",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/logo-countdown-party.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/fondo.png",
+      "resizeMode": "cover"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.partycountdown.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "Camino a tu cumple",
+      "shortName": "Tu cumple",
+      "description": "Cuenta regresiva con sorpresas diarias hasta tu cumpleaños",
+      "lang": "es",
+      "themeColor": "#6a11cb",
+      "backgroundColor": "#6a11cb",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "scope": "/"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f9d8fc96-cfc4-4f89-9faa-7a291b110230"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f9d8fc96-cfc4-4f89-9faa-7a291b110230"
+    }
+  }
+}
