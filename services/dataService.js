@@ -1,5 +1,6 @@
 import { getSupabase } from '../lib/supabase';
 import { isSupabaseConfigured, STORAGE_BUCKET } from '../lib/config';
+import { applyGiftScheduleToDay } from '../lib/giftSchedule';
 
 const PLACEHOLDER_IMAGE =
   'https://via.placeholder.com/400x400/cccccc/ffffff?text=Imagen+no+disponible';
@@ -102,8 +103,9 @@ async function getDayPhotos(day) {
 
 function lightEnrichDay(day) {
   const imageUrl = day.imagePath ? getStoragePublicUrl(day.imagePath) : PLACEHOLDER_IMAGE;
+  const withGift = applyGiftScheduleToDay(day);
   return {
-    ...day,
+    ...withGift,
     imageUrl,
     audioUrl: null,
     photos: [imageUrl],
@@ -116,8 +118,9 @@ async function enrichDay(day) {
   const audioUrl = day.audioPath ? await resolveMediaUrl(day.audioPath) : null;
   const photos = await getDayPhotos(day);
 
+  const withGift = applyGiftScheduleToDay(day);
   return {
-    ...day,
+    ...withGift,
     imageUrl,
     audioUrl,
     photos,

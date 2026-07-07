@@ -26,9 +26,11 @@ import { useNetworkStatus } from './hooks/useNetworkStatus';
 import ProgressiveImage from './components/ProgressiveImage';
 import InstallPwaBanner from './components/InstallPwaBanner';
 import OfflineScreen from './components/OfflineScreen';
+import { getGiftMessage } from './lib/giftSchedule';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
 const VIEWED_KEY = 'viewedImages';
+const OPENED_GIFTS_KEY = 'openedGifts';
 
 const BIRTHDAY_MONTH = 7;
 const BIRTHDAY_DAY = 9;
@@ -72,6 +74,8 @@ export default function App() {
   const [realTodayIndex, setRealTodayIndex] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [openedGifts, setOpenedGifts] = useState({});
+  const [giftMessage, setGiftMessage] = useState('');
   const flatListRef = useRef(null);
   const galleryRef = useRef(null);
 
@@ -88,6 +92,26 @@ export default function App() {
     }
   };
 
+  const markGiftOpened = useCallback(async (dayNumber) => {
+    const key = String(dayNumber);
+    setOpenedGifts((prev) => {
+      if (prev[key]) return prev;
+      const next = { ...prev, [key]: true };
+      AsyncStorage.setItem(OPENED_GIFTS_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const openGiftModal = useCallback(
+    (day) => {
+      if (!day?.hasGift || day.giftNumber == null) return;
+      setGiftNumber(day.giftNumber);
+      setGiftMessage(getGiftMessage(day.giftNumber));
+      setShowGiftModal(true);
+      markGiftOpened(day.dayNumber);
+    },
+    [markGiftOpened]
+  );
   const markDayViewed = useCallback(async (dayNumber) => {
     const key = String(dayNumber);
     setViewed((prev) => {
@@ -151,16 +175,20 @@ export default function App() {
         const calculatedDiff = getDaysUntilBirthday();
         const index = getTodayDayIndex(daysData.length, calculatedDiff);
 
+        const viewedData = await AsyncStorage.getItem(VIEWED_KEY);
+        const openedData = await AsyncStorage.getItem(OPENED_GIFTS_KEY);
+        if (viewedData && !cancelled) {
+          setViewed(JSON.parse(viewedData));
+        }
+        if (openedData && !cancelled) {
+          setOpenedGifts(JSON.parse(openedData));
+        }
+
         setDays(daysData);
         setDiff(calculatedDiff);
         setRealTodayIndex(index);
         setTodayIndex(index);
         setCurrentDay(daysData[index]);
-
-        const viewedData = await AsyncStorage.getItem(VIEWED_KEY);
-        if (viewedData && !cancelled) {
-          setViewed(JSON.parse(viewedData));
-        }
 
         if (!cancelled) {
           await applyDayAtIndex(daysData, index);
@@ -191,6 +219,12 @@ export default function App() {
       cleanupAudio();
     }
   }, [currentDay?.dayNumber]);
+
+  useEffect(() => {
+    if (loading || !currentDay?.hasGift || todayIndex !== realTodayIndex) return;
+    if (openedGifts[String(currentDay.dayNumber)]) return;
+    openGiftModal(currentDay);
+  }, [loading, currentDay, todayIndex, realTodayIndex, openedGifts, openGiftModal]);
 
   useEffect(() => {
     if (!galleryRef.current || todayIndex < 0) return;
@@ -304,15 +338,15 @@ export default function App() {
   }
 
   function handleGiftPress() {
-    if (currentDay?.giftNumber) {
-      setGiftNumber(currentDay.giftNumber);
-      setShowGiftModal(true);
+    if (currentDay?.hasGift) {
+      openGiftModal(currentDay);
     }
   }
 
   function closeGiftModal() {
     setShowGiftModal(false);
     setGiftNumber(null);
+    setGiftMessage('');
   }
 
   async function onPressImage(index) {
@@ -409,12 +443,20 @@ export default function App() {
                 </View>
               </>
             ) : (
-              <ProgressiveImage
-                source={currentDay?.imageUrl ? { uri: currentDay.imageUrl } : FALLBACK_IMAGE}
-                style={styles.image}
-                imageStyle={styles.image}
-                accessibilityLabel={`Imagen del día ${currentDay.dayNumber}`}
-              />
+              <View style={styles.imageWrap}>
+                <ProgressiveImage
+                  source={currentDay?.imageUrl ? { uri: currentDay.imageUrl } : FALLBACK_IMAGE}
+                  style={styles.image}
+                  imageStyle={styles.image}
+                  accessibilityLabel={`Imagen del día ${currentDay.dayNumber}`}
+                />
+                {currentDay.hasGift ? (
+                  <View style={styles.imageGiftBadge}>
+                    <MaterialIcons name="card-giftcard" size={22} color="#fff" />
+                    <Text style={styles.imageGiftBadgeText}>Regalo</Text>
+                  </View>
+                ) : null}
+              </View>
             )}
           </Animated.View>
 
@@ -449,6 +491,8 @@ export default function App() {
           const isActive = i === todayIndex;
           const isLocked = i > realTodayIndex;
           const isViewed = viewed[String(day.dayNumber)];
+          const hasGift = day.hasGift;
+          const giftOpened = openedGifts[String(day.dayNumber)];
 
           return (
             <TouchableOpacity
@@ -459,8 +503,9 @@ export default function App() {
                 styles.thumbnailContainer,
                 isActive && styles.thumbnailActive,
                 isLocked && styles.thumbnailLocked,
+                hasGift && styles.thumbnailGift,
               ]}
-              accessibilityLabel={`Día ${day.dayNumber}${isLocked ? ', bloqueado' : ''}`}
+              accessibilityLabel={`Día ${day.dayNumber}${hasGift ? ', día de regalo' : ''}${isLocked ? ', bloqueado' : ''}`}
               accessibilityState={{ selected: isActive, disabled: isLocked }}
             >
               <ProgressiveImage
@@ -471,9 +516,19 @@ export default function App() {
               <View style={styles.dayBadge}>
                 <Text style={styles.dayBadgeText}>{day.dayNumber}</Text>
               </View>
+              {hasGift ? (
+                <View style={[styles.giftThumbBadge, isLocked && styles.giftThumbBadgeLocked]}>
+                  <MaterialIcons name="card-giftcard" size={14} color="#fff" />
+                </View>
+              ) : null}
               {isViewed && !isLocked ? (
                 <View style={styles.viewedBadge}>
                   <MaterialIcons name="check-circle" size={18} color="#4ade80" />
+                </View>
+              ) : null}
+              {hasGift && giftOpened && !isLocked ? (
+                <View style={styles.giftOpenedBadge}>
+                  <MaterialIcons name="redeem" size={16} color="#fbbf24" />
                 </View>
               ) : null}
               {isLocked ? (
@@ -487,7 +542,13 @@ export default function App() {
       </ScrollView>
 
       {currentDay?.hasGift ? (
-        <Animated.View style={[styles.giftButtonSmall, giftButtonStyle]}>
+        <Animated.View
+          style={[
+            styles.giftButtonSmall,
+            giftButtonStyle,
+            !openedGifts[String(currentDay.dayNumber)] && styles.giftButtonPulse,
+          ]}
+        >
           <Pressable
             onPress={handleGiftPress}
             android_ripple={{ color: '#fff' }}
@@ -521,8 +582,11 @@ export default function App() {
             </View>
 
             <View style={styles.giftNumberContainer}>
-              <Text style={styles.giftNumberLabel}>Tu número es:</Text>
+              <Text style={styles.giftNumberLabel}>Regalo especial #{giftNumber}</Text>
               <Text style={styles.giftNumber}>{giftNumber}</Text>
+              {giftMessage ? (
+                <Text style={styles.giftMessageText}>{giftMessage}</Text>
+              ) : null}
             </View>
 
             <TouchableOpacity
@@ -664,6 +728,28 @@ function createStyles(screenWidth) {
       width: '100%',
       height: '100%',
     },
+    imageWrap: {
+      width: '100%',
+      height: '100%',
+      position: 'relative',
+    },
+    imageGiftBadge: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: '#ff6b6bee',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 20,
+    },
+    imageGiftBadgeText: {
+      color: '#fff',
+      fontWeight: '800',
+      fontSize: 12,
+    },
     carousel: {
       width: '100%',
       height: '100%',
@@ -725,6 +811,12 @@ function createStyles(screenWidth) {
       elevation: 12,
       marginTop: 12,
       alignSelf: 'center',
+      borderWidth: 2,
+      borderColor: '#fff3',
+    },
+    giftButtonPulse: {
+      shadowOpacity: 1,
+      shadowRadius: 22,
     },
     pressable: {
       flexDirection: 'row',
@@ -773,6 +865,9 @@ function createStyles(screenWidth) {
     thumbnailLocked: {
       opacity: 0.35,
     },
+    thumbnailGift: {
+      borderColor: '#fbbf24',
+    },
     thumbnail: {
       width: 92,
       height: 92,
@@ -791,6 +886,29 @@ function createStyles(screenWidth) {
       color: '#fff',
       fontSize: 11,
       fontWeight: '800',
+    },
+    giftThumbBadge: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      backgroundColor: '#ff6b6b',
+      borderRadius: 12,
+      padding: 4,
+      minWidth: 24,
+      minHeight: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    giftThumbBadgeLocked: {
+      backgroundColor: '#94a3b8',
+    },
+    giftOpenedBadge: {
+      position: 'absolute',
+      bottom: 6,
+      left: 6,
+      backgroundColor: 'rgba(255,255,255,0.92)',
+      borderRadius: 12,
+      padding: 2,
     },
     viewedBadge: {
       position: 'absolute',
@@ -864,6 +982,14 @@ function createStyles(screenWidth) {
       fontSize: 48,
       fontWeight: 'bold',
       color: '#ff6b6b',
+    },
+    giftMessageText: {
+      marginTop: 16,
+      fontSize: 15,
+      lineHeight: 22,
+      color: '#475569',
+      textAlign: 'center',
+      paddingHorizontal: 8,
     },
     modalButton: {
       backgroundColor: '#ff6b6b',

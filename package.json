@@ -13,6 +13,9 @@
     "deploy:vercel:preview": "npm run build:web && npx vercel deploy --prebuilt",
     "setup:vercel-env": "node scripts/setup-vercel-env.mjs",
     "migrate:firebase": "node scripts/migrate-firebase-to-supabase.mjs",
+    "migrate:supabase": "node scripts/migrate-supabase-project.mjs",
+    "setup:party-bel": "node scripts/setup-party-bel-schema.mjs",
+    "assign:gifts": "node scripts/assign-gift-days.mjs",
     "admin:server": "node server/admin-server.mjs",
     "dev:admin": "node server/admin-server.mjs"
   },
