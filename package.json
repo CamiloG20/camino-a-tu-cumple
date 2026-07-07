@@ -9,6 +9,9 @@
     "web": "expo start --web",
     "build:web": "expo export -p web && npx workbox-cli generateSW workbox-config.js",
     "serve:web": "npx serve dist -s -l 3000",
+    "deploy:vercel": "npm run build:web && npx vercel deploy --prebuilt --prod",
+    "deploy:vercel:preview": "npm run build:web && npx vercel deploy --prebuilt",
+    "setup:vercel-env": "node scripts/setup-vercel-env.mjs",
     "migrate:firebase": "node scripts/migrate-firebase-to-supabase.mjs",
     "admin:server": "node server/admin-server.mjs",
     "dev:admin": "node server/admin-server.mjs"
@@ -38,6 +41,7 @@
     "@babel/core": "^7.20.0",
     "firebase": "^11.10.0",
     "pg": "^8.16.0",
+    "vercel": "^54.21.0",
     "workbox-cli": "^7.3.0"
   },
   "private": true
