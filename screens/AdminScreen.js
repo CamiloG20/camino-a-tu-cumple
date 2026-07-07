@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -114,17 +114,26 @@ export default function AdminScreen() {
   });
   const [musicUrl, setMusicUrl] = useState('');
   const [busyAction, setBusyAction] = useState('');
+  const isMountedRef = useRef(true);
 
-  const loadDays = useCallback(async (isActive = () => true) => {
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadDays = useCallback(async (isActive = () => isMountedRef.current) => {
     setLoading(true);
     try {
       const data = await AdminApi.getDays();
       if (!isActive()) return;
 
       setDays(data);
-      if (!selectedDay && data.length) {
-        setSelectedDay(data[0].day_number);
-      }
+      setSelectedDay((current) => {
+        if (current != null) return current;
+        return data.length ? data[0].day_number : null;
+      });
     } catch (error) {
       if (!isActive()) return;
 
@@ -138,7 +147,7 @@ export default function AdminScreen() {
         setLoading(false);
       }
     }
-  }, [selectedDay]);
+  }, []);
 
   useEffect(() => {
     const stored = getStoredAdminPassword();
@@ -378,7 +387,10 @@ export default function AdminScreen() {
           ) : null}
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={loadDays}>
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => loadDays(() => isMountedRef.current)}
+          >
             <Text style={styles.secondaryBtnText}>Recargar</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={handleLogout}>
