@@ -19,13 +19,14 @@ import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { DataService } from './services/dataService';
 import { isSupabaseConfigured } from './lib/config';
-import { getDaysUntilBirthday, getTodayDayIndex, getCalendarDateForDayNumber, formatCalendarDate } from './lib/calendar';
+import { getDaysUntilBirthday, getTodayDayIndex, getCalendarDateForDayNumber, formatCalendarDate, isBeforeEventStart, getDaysUntilEventStart, getEventStartDate } from './lib/calendar';
 import { GRADIENT_COLORS, BIRTHDAY_GRADIENT_COLORS, getContentWidth, safeArea } from './lib/layout';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import ProgressiveImage from './components/ProgressiveImage';
 import InstallPwaBanner from './components/InstallPwaBanner';
 import OfflineScreen from './components/OfflineScreen';
+import EventNotStartedScreen from './components/EventNotStartedScreen';
 import AudioSeekBar from './components/AudioSeekBar';
 import GiftModal from './components/GiftModal';
 import FallbackBanner from './components/FallbackBanner';
@@ -69,6 +70,8 @@ export default function App({ previewDayNumber = null }) {
   const [reloadToken, setReloadToken] = useState(0);
   const [openedGifts, setOpenedGifts] = useState({});
   const [giftMessage, setGiftMessage] = useState('');
+  const [eventNotStarted, setEventNotStarted] = useState(false);
+  const [daysUntilStart, setDaysUntilStart] = useState(0);
   const flatListRef = useRef(null);
   const galleryRef = useRef(null);
   const dayNavTokenRef = useRef(0);
@@ -194,7 +197,8 @@ export default function App({ previewDayNumber = null }) {
         if (cancelled) return;
 
         const calculatedDiff = getDaysUntilBirthday();
-        let index = getTodayDayIndex(daysData.length, calculatedDiff);
+        const beforeStart = !adminPreview && isBeforeEventStart();
+        let index = beforeStart ? -1 : getTodayDayIndex(daysData.length);
 
         if (adminPreview) {
           const previewIndex = daysData.findIndex((d) => d.dayNumber === previewDayNumber);
@@ -211,13 +215,17 @@ export default function App({ previewDayNumber = null }) {
         setOpenedGifts(parseStorageJson(openedData));
         setDays(daysData);
         setDiff(calculatedDiff);
+        setEventNotStarted(beforeStart);
+        setDaysUntilStart(beforeStart ? getDaysUntilEventStart() : 0);
         setRealTodayIndex(adminPreview ? daysData.length - 1 : index);
         setTodayIndex(index);
-        setCurrentDay(daysData[index]);
+        setCurrentDay(index >= 0 ? daysData[index] : null);
         setUsingFallback(fallback);
         setUsingCache(fromCache && !fallback);
 
-        await applyDayAtIndex(daysData, index, () => !cancelled);
+        if (index >= 0) {
+          await applyDayAtIndex(daysData, index, () => !cancelled);
+        }
       } catch (error) {
         console.error('Error cargando datos:', error);
         if (!cancelled) {
@@ -275,7 +283,11 @@ export default function App({ previewDayNumber = null }) {
     setGiftMessage('');
   }
 
-  const effectiveTodayIndex = adminPreview ? days.length - 1 : realTodayIndex;
+  const effectiveTodayIndex = adminPreview
+    ? days.length - 1
+    : eventNotStarted
+      ? -1
+      : realTodayIndex;
 
   async function onPressImage(index) {
     if (index > effectiveTodayIndex) {
@@ -631,6 +643,18 @@ export default function App({ previewDayNumber = null }) {
       <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
         <StatusBar style="light" />
         <OfflineScreen onRetry={() => setReloadToken((n) => n + 1)} />
+      </LinearGradient>
+    );
+  }
+
+  if (eventNotStarted && !adminPreview) {
+    return (
+      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+        <StatusBar style="light" />
+        <EventNotStartedScreen
+          daysUntilStart={daysUntilStart}
+          startDate={getEventStartDate()}
+        />
       </LinearGradient>
     );
   }
