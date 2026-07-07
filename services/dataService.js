@@ -88,7 +88,7 @@ async function getDayPhotos(day) {
   if (Array.isArray(day.photoPaths) && day.photoPaths.length) {
     const extraUrls = await Promise.all(day.photoPaths.map((path) => resolveMediaUrl(path)));
     extraUrls.forEach(addPhoto);
-  } else {
+  } else if (!day.enriched) {
     const listed = await listStoragePhotos(day.dayNumber);
     listed.forEach(addPhoto);
   }
@@ -98,6 +98,17 @@ async function getDayPhotos(day) {
   }
 
   return photos;
+}
+
+function lightEnrichDay(day) {
+  const imageUrl = day.imagePath ? getStoragePublicUrl(day.imagePath) : PLACEHOLDER_IMAGE;
+  return {
+    ...day,
+    imageUrl,
+    audioUrl: null,
+    photos: [imageUrl],
+    enriched: false,
+  };
 }
 
 async function enrichDay(day) {
@@ -110,6 +121,7 @@ async function enrichDay(day) {
     imageUrl,
     audioUrl,
     photos,
+    enriched: true,
   };
 }
 
@@ -126,6 +138,28 @@ export class DataService {
     }
 
     return (data ?? []).map(mapDayRow);
+  }
+
+  /** Carga rápida: solo metadatos + URL de imagen principal (sin listar Storage ni audio) */
+  static async getAllDaysLight() {
+    if (!isSupabaseConfigured()) {
+      throw new Error('Supabase no está configurado');
+    }
+
+    const days = await this.getDays();
+    if (!days.length) {
+      throw new Error('No hay días configurados en Supabase');
+    }
+
+    return days.map(lightEnrichDay);
+  }
+
+  /** Carga completa de un día (audio, fotos extra, carrusel) */
+  static async enrichDayFull(day) {
+    if (day?.enriched) {
+      return day;
+    }
+    return enrichDay(day);
   }
 
   static async getAllDaysWithUrls() {
@@ -152,6 +186,7 @@ export class DataService {
         photos: [
           'https://via.placeholder.com/400x400/ff6b6b/ffffff?text=D%C3%ADa+31',
         ],
+        enriched: true,
       },
       {
         dayNumber: 30,
@@ -161,6 +196,7 @@ export class DataService {
         photos: [
           'https://via.placeholder.com/400x400/6a11cb/ffffff?text=D%C3%ADa+30',
         ],
+        enriched: true,
       },
       {
         dayNumber: 29,
@@ -170,6 +206,7 @@ export class DataService {
         photos: [
           'https://via.placeholder.com/400x400/2575fc/ffffff?text=D%C3%ADa+29',
         ],
+        enriched: true,
       },
     ];
   }

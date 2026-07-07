@@ -10,6 +10,7 @@ import {
   Platform,
   Switch,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -52,6 +53,9 @@ const webStyles = {
 };
 
 export default function AdminScreen() {
+  const { width } = useWindowDimensions();
+  const isNarrow = width < 768;
+  const styles = useMemo(() => createStyles(isNarrow), [isNarrow]);
   const [password, setPassword] = useState('');
   const [authed, setAuthed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -237,7 +241,9 @@ export default function AdminScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Panel Admin</Text>
-          <Text style={styles.subtitle}>API: {getAdminApiUrl()}</Text>
+          {!isNarrow ? (
+            <Text style={styles.subtitle}>API: {getAdminApiUrl()}</Text>
+          ) : null}
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.secondaryBtn} onPress={loadDays}>
@@ -256,7 +262,12 @@ export default function AdminScreen() {
         <ActivityIndicator color="#fff" size="large" style={{ marginTop: 40 }} />
       ) : (
         <View style={styles.layout}>
-          <ScrollView style={styles.sidebar} contentContainerStyle={styles.sidebarContent}>
+          <ScrollView
+            horizontal={!isNarrow}
+            style={styles.sidebar}
+            contentContainerStyle={styles.sidebarContent}
+            showsHorizontalScrollIndicator={false}
+          >
             {days.map((day) => (
               <TouchableOpacity
                 key={day.day_number}
@@ -358,7 +369,8 @@ export default function AdminScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (isNarrow) =>
+  StyleSheet.create({
   container: { flex: 1, minHeight: '100%' },
   blocked: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   blockedText: { color: '#fff', fontSize: 16, textAlign: 'center' },
@@ -368,10 +380,11 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     padding: 32,
     alignSelf: 'center',
+    paddingTop: 'max(48px, env(safe-area-inset-top, 0px))',
   },
   header: {
     padding: 20,
-    paddingTop: 48,
+    paddingTop: 'max(48px, env(safe-area-inset-top, 0px))',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
@@ -381,9 +394,25 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   title: { color: '#fff', fontSize: 28, fontWeight: '800' },
   subtitle: { color: '#cbd5e1', fontSize: 13, marginTop: 4 },
-  layout: { flex: 1, flexDirection: 'row', minHeight: 500 },
-  sidebar: { width: 140, borderRightWidth: 1, borderRightColor: '#334155' },
-  sidebarContent: { padding: 12, gap: 8 },
+  layout: {
+    flex: 1,
+    flexDirection: isNarrow ? 'column' : 'row',
+    minHeight: 500,
+  },
+  sidebar: {
+    width: isNarrow ? '100%' : 140,
+    maxHeight: isNarrow ? 120 : undefined,
+    borderRightWidth: isNarrow ? 0 : 1,
+    borderBottomWidth: isNarrow ? 1 : 0,
+    borderRightColor: '#334155',
+    borderBottomColor: '#334155',
+  },
+  sidebarContent: {
+    padding: 12,
+    gap: 8,
+    flexDirection: isNarrow ? 'row' : 'column',
+    flexWrap: isNarrow ? 'nowrap' : 'wrap',
+  },
   dayChip: {
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -426,4 +455,4 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: '#fff', fontSize: 13 },
   link: { color: '#93c5fd', marginTop: 16, textAlign: 'center' },
-});
+  });

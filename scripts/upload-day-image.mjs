@@ -17,7 +17,7 @@ const env = Object.fromEntries(
 const dayNumber = Number(process.argv[2]);
 const filePath = process.argv[3];
 
-if (!dayNumber || !filePath) {
+if (Number.isNaN(dayNumber) || dayNumber < 0 || !filePath) {
   console.error('Uso: node scripts/upload-day-image.mjs <día> <ruta-imagen>');
   process.exit(1);
 }

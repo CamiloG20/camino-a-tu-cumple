@@ -30,7 +30,8 @@ function getCalendarDate(daysUntil, year = 2026) {
   const birthday = new Date(year, BIRTHDAY_MONTH, BIRTHDAY_DAY);
   const d = new Date(birthday);
   d.setDate(d.getDate() - daysUntil);
-  return d.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
+  const label = d.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
+  return daysUntil === 0 ? `${label} · cumpleaños` : label;
 }
 
 const { data, error } = await supabase.from('days').select('*').order('day_number', { ascending: false });

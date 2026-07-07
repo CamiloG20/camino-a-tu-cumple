@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -22,10 +21,15 @@ import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { DataService } from './services/dataService';
 import { isSupabaseConfigured } from './lib/config';
+import { GRADIENT_COLORS, getContentWidth, safeArea } from './lib/layout';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
+import ProgressiveImage from './components/ProgressiveImage';
+import InstallPwaBanner from './components/InstallPwaBanner';
+import OfflineScreen from './components/OfflineScreen';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
+const VIEWED_KEY = 'viewedImages';
 
-// Cumpleaños oficial: 9 de agosto (mes 7 en JavaScript, 0 = enero)
 const BIRTHDAY_MONTH = 7;
 const BIRTHDAY_DAY = 9;
 
@@ -41,8 +45,7 @@ function getDaysUntilBirthday(date = new Date()) {
 }
 
 function getTodayDayIndex(daysCount, daysUntilBirthday) {
-  // Días ordenados del 31 al 1: si faltan 31 días → índice 0 (día 31)
-  let index = daysCount - daysUntilBirthday;
+  let index = (daysCount - 1) - daysUntilBirthday;
   if (index < 0) index = 0;
   if (index >= daysCount) index = daysCount - 1;
   return index;
@@ -50,11 +53,9 @@ function getTodayDayIndex(daysCount, daysUntilBirthday) {
 
 export default function App() {
   const { width: windowWidth } = useWindowDimensions();
-  const screenWidth = Math.min(
-    windowWidth,
-    Platform.OS === 'web' ? 520 : windowWidth
-  );
+  const screenWidth = getContentWidth(windowWidth);
   const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
+  const isOnline = useNetworkStatus();
 
   const [todayIndex, setTodayIndex] = useState(0);
   const [viewed, setViewed] = useState({});
@@ -62,15 +63,18 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [enrichingDay, setEnrichingDay] = useState(false);
   const [currentDay, setCurrentDay] = useState(null);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [giftNumber, setGiftNumber] = useState(null);
   const [diff, setDiff] = useState(0);
   const [realTodayIndex, setRealTodayIndex] = useState(0);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const flatListRef = useRef(null);
+  const galleryRef = useRef(null);
 
-  // Función para limpiar el audio
   const cleanupAudio = async () => {
     if (soundObj) {
       try {
@@ -84,6 +88,34 @@ export default function App() {
     }
   };
 
+  const markDayViewed = useCallback(async (dayNumber) => {
+    const key = String(dayNumber);
+    setViewed((prev) => {
+      if (prev[key]) return prev;
+      const next = { ...prev, [key]: true };
+      AsyncStorage.setItem(VIEWED_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const applyDayAtIndex = useCallback(async (daysList, index) => {
+    let day = daysList[index];
+    if (!day?.enriched) {
+      setEnrichingDay(true);
+      try {
+        day = await DataService.enrichDayFull(day);
+        setDays((prev) => prev.map((item, i) => (i === index ? day : item)));
+      } finally {
+        setEnrichingDay(false);
+      }
+    }
+    setTodayIndex(index);
+    setCurrentDay(day);
+    setCurrentPhotoIndex(0);
+    markDayViewed(day.dayNumber);
+    return day;
+  }, [markDayViewed]);
+
   useEffect(() => {
     Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
@@ -91,9 +123,16 @@ export default function App() {
       shouldDuckAndroid: true,
     }).catch(() => {});
 
+    let cancelled = false;
+
     const loadData = async () => {
       try {
         setLoading(true);
+        setLoadError(false);
+
+        if (Platform.OS === 'web' && typeof navigator !== 'undefined' && !navigator.onLine) {
+          throw new Error('Sin conexión');
+        }
 
         let daysData;
 
@@ -101,70 +140,81 @@ export default function App() {
           if (!isSupabaseConfigured()) {
             throw new Error('Supabase no configurado');
           }
-          daysData = await DataService.getAllDaysWithUrls();
+          daysData = await DataService.getAllDaysLight();
         } catch (dataError) {
           console.warn('⚠️ Error con Supabase, usando datos de fallback:', dataError);
           daysData = await DataService.getFallbackData();
         }
 
-        setDays(daysData);
+        if (cancelled) return;
 
-        // Calcular el día actual según días restantes hasta el 9 de agosto
         const calculatedDiff = getDaysUntilBirthday();
-        setDiff(calculatedDiff);
         const index = getTodayDayIndex(daysData.length, calculatedDiff);
 
-        setTodayIndex(index);
+        setDays(daysData);
+        setDiff(calculatedDiff);
         setRealTodayIndex(index);
+        setTodayIndex(index);
         setCurrentDay(daysData[index]);
-        setCurrentPhotoIndex(0); // Resetear índice de foto al cambiar de día
 
-        // Cargar datos de visualización guardados
-        const viewedData = await AsyncStorage.getItem('viewedImages');
-        if (viewedData) setViewed(JSON.parse(viewedData));
+        const viewedData = await AsyncStorage.getItem(VIEWED_KEY);
+        if (viewedData && !cancelled) {
+          setViewed(JSON.parse(viewedData));
+        }
 
+        if (!cancelled) {
+          await applyDayAtIndex(daysData, index);
+        }
       } catch (error) {
         console.error('Error cargando datos:', error);
-        Alert.alert('Error', 'No se pudieron cargar los datos del calendario.');
+        if (!cancelled) {
+          setLoadError(true);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadData();
 
     return () => {
+      cancelled = true;
       cleanupAudio();
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadToken]);
 
-  // Efecto para limpiar audio cuando cambie el día
   useEffect(() => {
     if (currentDay) {
       cleanupAudio();
     }
   }, [currentDay?.dayNumber]);
 
-  // Animación del botón de audio con reanimated (scale)
-  const audioButtonStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: isPlaying ? withSpring(1.1) : withSpring(1) }],
-      shadowOpacity: isPlaying ? 0.7 : 0.3,
-      shadowRadius: isPlaying ? 10 : 5,
-    };
-  });
+  useEffect(() => {
+    if (!galleryRef.current || todayIndex < 0) return;
+    galleryRef.current.scrollTo({
+      x: Math.max(0, todayIndex * 104 - screenWidth / 2 + 52),
+      animated: true,
+    });
+  }, [todayIndex, screenWidth, loading]);
 
-  // Animación del botón de regalo (suave)
-  const giftButtonStyle = useAnimatedStyle(() => {
-    return {
-      shadowOpacity: 0.8,
-      shadowRadius: 15,
-      transform: [{ scale: withSpring(1) }],
-    };
-  });
+  const audioButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: isPlaying ? withSpring(1.1) : withSpring(1) }],
+    shadowOpacity: isPlaying ? 0.7 : 0.3,
+    shadowRadius: isPlaying ? 10 : 5,
+  }));
+
+  const giftButtonStyle = useAnimatedStyle(() => ({
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    transform: [{ scale: withSpring(1) }],
+  }));
 
   async function togglePlayback() {
-    const hasValidAudio = currentDay?.audioUrl &&
+    const hasValidAudio =
+      currentDay?.audioUrl &&
       typeof currentDay.audioUrl === 'string' &&
       currentDay.audioUrl.startsWith('http');
 
@@ -181,13 +231,10 @@ export default function App() {
   }
 
   async function handleAudioPlayback() {
-    const noExistingSound = !soundObj;
-
-    if (noExistingSound) {
+    if (!soundObj) {
       await createAndPlayNewSound();
       return;
     }
-
     await handleExistingSound();
   }
 
@@ -200,15 +247,13 @@ export default function App() {
     sound.setOnPlaybackStatusUpdate((status) => {
       if (!status.isLoaded) return;
 
-      const audioFinished = !status.isPlaying && status.didJustFinish;
-      if (audioFinished) {
+      if (!status.isPlaying && status.didJustFinish) {
         setIsPlaying(false);
         setSoundObj(null);
         return;
       }
 
-      const stateChanged = status.isPlaying !== isPlaying;
-      if (stateChanged) {
+      if (status.isPlaying !== isPlaying) {
         setIsPlaying(status.isPlaying);
       }
     });
@@ -220,13 +265,10 @@ export default function App() {
 
   async function handleExistingSound() {
     const status = await soundObj.getStatusAsync();
-    const soundNotLoaded = !status.isLoaded;
-
-    if (soundNotLoaded) {
+    if (!status.isLoaded) {
       await recreateSound();
       return;
     }
-
     await toggleExistingSound(status);
   }
 
@@ -238,38 +280,31 @@ export default function App() {
   }
 
   async function toggleExistingSound(status) {
-    const isCurrentlyPlaying = status.isPlaying;
-
-    if (isCurrentlyPlaying) {
+    if (status.isPlaying) {
       await soundObj.pauseAsync();
       setIsPlaying(false);
       return;
     }
-
     await soundObj.playAsync();
     setIsPlaying(true);
   }
 
   async function handleAudioError(error) {
     console.error('Error con el audio:', error);
-
-    const hasSoundObject = soundObj;
-    if (hasSoundObject) {
+    if (soundObj) {
       try {
         await soundObj.unloadAsync();
       } catch (unloadError) {
         console.warn('Error al descargar audio:', unloadError);
       }
     }
-
     setSoundObj(null);
     setIsPlaying(false);
     Alert.alert('Error', 'No se pudo reproducir el audio.');
   }
 
   function handleGiftPress() {
-    const hasGiftNumber = currentDay?.giftNumber;
-    if (hasGiftNumber) {
+    if (currentDay?.giftNumber) {
       setGiftNumber(currentDay.giftNumber);
       setShowGiftModal(true);
     }
@@ -280,29 +315,24 @@ export default function App() {
     setGiftNumber(null);
   }
 
-  function onPressImage(index) {
+  async function onPressImage(index) {
     if (index > realTodayIndex) {
       Alert.alert('Bloqueado', 'No puedes ver días futuros.');
       return;
     }
-    
-    // Cambiar al día seleccionado
-    setTodayIndex(index);
-    setCurrentDay(days[index]);
-    setCurrentPhotoIndex(0); // Resetear índice de foto al cambiar de día
+    await applyDayAtIndex(days, index);
   }
 
-  const renderPhotoItem = ({ item, index }) => {
-    return (
-      <TouchableOpacity onPress={() => onPressImage(todayIndex)} activeOpacity={0.9} style={styles.carouselItem}>
-        <Image
-          source={{ uri: item }}
-          style={styles.carouselImage}
-          resizeMode="cover"
-        />
-      </TouchableOpacity>
-    );
-  };
+  const renderPhotoItem = ({ item }) => (
+    <View style={styles.carouselItem}>
+      <ProgressiveImage
+        source={{ uri: item }}
+        style={styles.carouselImage}
+        imageStyle={styles.carouselImage}
+        accessibilityLabel={`Foto del día ${currentDay?.dayNumber}`}
+      />
+    </View>
+  );
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) {
@@ -311,70 +341,91 @@ export default function App() {
   }).current;
 
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 50
+    itemVisiblePercentThreshold: 50,
   }).current;
 
   const daysLeft = currentDay ? currentDay.dayNumber : diff;
+  const isBirthdayDay = currentDay?.dayNumber === 0;
 
   const mainContent = (
     <>
-      <Text style={styles.daysLeftText}>Faltan {daysLeft} días 🎂❤️</Text>
+      <InstallPwaBanner />
+
+      <Text style={styles.daysLeftText} accessibilityRole="header">
+        {isBirthdayDay ? '¡Feliz cumpleaños! 🎂❤️' : `Faltan ${daysLeft} días 🎂❤️`}
+      </Text>
 
       {currentDay && (
         <>
-          {currentDay.text && (
+          {currentDay.text ? (
             <Text style={styles.dayText}>{currentDay.text}</Text>
-          )}
+          ) : null}
 
-          <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.imageContainer}>
-            {currentDay?.photos && currentDay.photos.length > 0 ? (
+          <Animated.View
+            key={`day-${currentDay.dayNumber}`}
+            entering={FadeIn.duration(280)}
+            exiting={FadeOut.duration(180)}
+            style={styles.imageContainer}
+          >
+            {enrichingDay ? (
+              <View style={styles.enrichingOverlay}>
+                <ActivityIndicator color="#6a11cb" size="large" />
+              </View>
+            ) : null}
+
+            {currentDay.photos && currentDay.photos.length > 1 ? (
               <>
                 <FlatList
                   ref={flatListRef}
                   data={currentDay.photos}
                   renderItem={renderPhotoItem}
-                  keyExtractor={(item, index) => index.toString()}
+                  keyExtractor={(item, index) => `${currentDay.dayNumber}-${index}`}
                   horizontal
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
                   onViewableItemsChanged={onViewableItemsChanged}
                   viewabilityConfig={viewabilityConfig}
                   style={styles.carousel}
-                  getItemLayout={(data, index) => ({
-                    length: screenWidth * 0.8,
-                    offset: screenWidth * 0.8 * index,
+                  getItemLayout={(_, index) => ({
+                    length: screenWidth * 0.88,
+                    offset: screenWidth * 0.88 * index,
                     index,
                   })}
                   initialNumToRender={1}
-                  maxToRenderPerBatch={3}
+                  maxToRenderPerBatch={2}
                   windowSize={3}
+                  removeClippedSubviews
                 />
-                {currentDay.photos.length > 1 && (
-                  <View style={styles.paginationContainer}>
-                    {currentDay.photos.map((_, index) => (
-                      <View
-                        key={index}
-                        style={[
-                          styles.paginationDot,
-                          index === currentPhotoIndex && styles.paginationDotActive
-                        ]}
-                      />
-                    ))}
-                  </View>
-                )}
+                <View style={styles.paginationContainer}>
+                  {currentDay.photos.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.paginationDot,
+                        index === currentPhotoIndex && styles.paginationDotActive,
+                      ]}
+                    />
+                  ))}
+                </View>
               </>
             ) : (
-              <TouchableOpacity onPress={() => onPressImage(todayIndex)} activeOpacity={0.9}>
-                <Image
-                  source={currentDay?.imageUrl ? { uri: currentDay.imageUrl } : FALLBACK_IMAGE}
-                  style={styles.image}
-                />
-              </TouchableOpacity>
+              <ProgressiveImage
+                source={currentDay?.imageUrl ? { uri: currentDay.imageUrl } : FALLBACK_IMAGE}
+                style={styles.image}
+                imageStyle={styles.image}
+                accessibilityLabel={`Imagen del día ${currentDay.dayNumber}`}
+              />
             )}
           </Animated.View>
 
           <Animated.View style={[styles.button, audioButtonStyle]}>
-            <Pressable onPress={togglePlayback} android_ripple={{ color: '#fff' }} style={styles.pressable}>
+            <Pressable
+              onPress={togglePlayback}
+              android_ripple={{ color: '#fff' }}
+              style={styles.pressable}
+              accessibilityRole="button"
+              accessibilityLabel={isPlaying ? 'Pausar canción' : 'Reproducir canción del día'}
+            >
               <MaterialIcons
                 name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
                 size={48}
@@ -387,56 +438,85 @@ export default function App() {
 
       <Text style={styles.galleryTitle}>Galería de días anteriores</Text>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroll}>
-        {days.map((day, i) => (
-          <TouchableOpacity
-            key={i}
-            disabled={i > realTodayIndex}
-            onPress={() => onPressImage(i)}
-            style={[
-              styles.thumbnailContainer,
-              i > realTodayIndex && { opacity: 0.3 },
-            ]}
-          >
-            <Image
-              source={day?.imageUrl ? { uri: day.imageUrl } : FALLBACK_IMAGE}
-              style={styles.thumbnail}
-            />
-            {i > realTodayIndex && (
-              <View style={styles.lockOverlay}>
-                <MaterialIcons name="lock" size={24} color="#999" />
+      <ScrollView
+        ref={galleryRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {days.map((day, i) => {
+          const isActive = i === todayIndex;
+          const isLocked = i > realTodayIndex;
+          const isViewed = viewed[String(day.dayNumber)];
+
+          return (
+            <TouchableOpacity
+              key={day.dayNumber}
+              disabled={isLocked}
+              onPress={() => onPressImage(i)}
+              style={[
+                styles.thumbnailContainer,
+                isActive && styles.thumbnailActive,
+                isLocked && styles.thumbnailLocked,
+              ]}
+              accessibilityLabel={`Día ${day.dayNumber}${isLocked ? ', bloqueado' : ''}`}
+              accessibilityState={{ selected: isActive, disabled: isLocked }}
+            >
+              <ProgressiveImage
+                source={day?.imageUrl ? { uri: day.imageUrl } : FALLBACK_IMAGE}
+                style={styles.thumbnail}
+                imageStyle={styles.thumbnail}
+              />
+              <View style={styles.dayBadge}>
+                <Text style={styles.dayBadgeText}>{day.dayNumber}</Text>
               </View>
-            )}
-          </TouchableOpacity>
-        ))}
+              {isViewed && !isLocked ? (
+                <View style={styles.viewedBadge}>
+                  <MaterialIcons name="check-circle" size={18} color="#4ade80" />
+                </View>
+              ) : null}
+              {isLocked ? (
+                <View style={styles.lockOverlay}>
+                  <MaterialIcons name="lock" size={24} color="#64748b" />
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
-      {/* Botón de regalo debajo de la galería */}
-      {currentDay?.hasGift && (
+      {currentDay?.hasGift ? (
         <Animated.View style={[styles.giftButtonSmall, giftButtonStyle]}>
-          <Pressable onPress={handleGiftPress} android_ripple={{ color: '#fff' }} style={styles.giftPressable}>
-            <MaterialIcons
-              name="card-giftcard"
-              size={32}
-              color="#fff"
-            />
+          <Pressable
+            onPress={handleGiftPress}
+            android_ripple={{ color: '#fff' }}
+            style={styles.giftPressable}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir regalo del día"
+          >
+            <MaterialIcons name="card-giftcard" size={32} color="#fff" />
           </Pressable>
         </Animated.View>
-      )}
+      ) : null}
 
-      {/* Modal del Regalo */}
       <Modal
         visible={showGiftModal}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={closeGiftModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <Pressable style={styles.modalOverlay} onPress={closeGiftModal}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>🎁 ¡Tienes un regalo!</Text>
-              <TouchableOpacity onPress={closeGiftModal} style={styles.closeButton}>
-                <MaterialIcons name="close" size={24} color="#666" />
+              <TouchableOpacity
+                onPress={closeGiftModal}
+                style={styles.closeButton}
+                accessibilityLabel="Cerrar modal de regalo"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <MaterialIcons name="close" size={28} color="#666" />
               </TouchableOpacity>
             </View>
 
@@ -445,21 +525,31 @@ export default function App() {
               <Text style={styles.giftNumber}>{giftNumber}</Text>
             </View>
 
-            <TouchableOpacity onPress={closeGiftModal} style={styles.modalButton}>
+            <TouchableOpacity
+              onPress={closeGiftModal}
+              style={styles.modalButton}
+              accessibilityLabel="Cerrar"
+            >
               <Text style={styles.modalButtonText}>Cerrar</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </>
   );
 
+  if (!isOnline && loadError && !days.length) {
+    return (
+      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+        <StatusBar style="light" />
+        <OfflineScreen onRetry={() => setReloadToken((n) => n + 1)} />
+      </LinearGradient>
+    );
+  }
+
   if (loading) {
     return (
-      <LinearGradient
-        colors={['#5c1b6c', '#7270d0']}
-        style={styles.container}
-      >
+      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
         <StatusBar style="light" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#fff" />
@@ -469,291 +559,333 @@ export default function App() {
     );
   }
 
+  if (loadError && !days.length) {
+    return (
+      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+        <StatusBar style="light" />
+        <OfflineScreen onRetry={() => setReloadToken((n) => n + 1)} />
+      </LinearGradient>
+    );
+  }
+
   return (
     <LinearGradient
-      colors={['#6a11cb', '#2575fc']}
+      colors={GRADIENT_COLORS}
       style={[styles.container, Platform.OS === 'web' && styles.webRoot]}
     >
       <StatusBar style="light" />
-      {Platform.OS === 'web' ? (
-        <ScrollView
-          contentContainerStyle={styles.webScrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.webInner}>{mainContent}</View>
-        </ScrollView>
-      ) : (
-        mainContent
-      )}
+      <ScrollView
+        contentContainerStyle={styles.scrollOuter}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <View style={styles.webInner}>{mainContent}</View>
+      </ScrollView>
     </LinearGradient>
   );
 }
 
 function createStyles(screenWidth) {
+  const imageSize = screenWidth * 0.88;
+
   return StyleSheet.create({
-  container: {
-    flex: 1,
-    width: '100%',
-    paddingTop: Platform.OS === 'web' ? 40 : 60,
-    alignItems: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#fff',
-    fontSize: 18,
-    marginTop: 20,
-    fontWeight: '600',
-  },
-  dayText: {
-    fontSize: 15,
-    fontWeight: '300',
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 15,
-    lineHeight: 28,
-    textShadowColor: '#00000066',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    fontFamily: 'Georgia',
-    letterSpacing: 0.5,
-    fontStyle: 'italic',
-  },
-  daysLeftText: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#fff',
-    marginBottom: 15,
-    textShadowColor: '#00000088',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-    textAlign: 'center',
-  },
-  imageContainer: {
-    width: screenWidth * 0.8,
-    height: screenWidth * 0.8,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 10,
-    marginBottom: 15,
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  carousel: {
-    width: '100%',
-    height: '100%',
-  },
-  carouselItem: {
-    width: screenWidth * 0.8,
-    height: screenWidth * 0.8,
-  },
-  carouselImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 20,
-  },
-  paginationContainer: {
-    position: 'absolute',
-    bottom: 15,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    marginHorizontal: 4,
-  },
-  paginationDotActive: {
-    backgroundColor: '#fff',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  checkmarkContainer: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#e0f2f1cc',
-    borderRadius: 20,
-    padding: 2,
-  },
-  button: {
-    backgroundColor: '#6200eecc',
-    borderRadius: 40,
-    marginBottom: 25,
-    shadowColor: '#6200ee',
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 8,
-  },
-  giftButtonSmall: {
-    backgroundColor: '#ff6b6b',
-    borderRadius: 30,
-    width: 60,
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#ff6b6b',
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 12,
-    marginTop: 15,
-    alignSelf: 'center',
-  },
-  pressable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 25,
-  },
-  giftPressable: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 10,
-    textShadowColor: '#00000066',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  galleryTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 10,
-  },
-  scroll: {
-    maxHeight: 110,
-  },
-  thumbnailContainer: {
-    marginHorizontal: 8,
-    position: 'relative',
-    borderRadius: 15,
-    overflow: 'hidden',
-  },
-  thumbnail: {
-    width: 90,
-    height: 90,
-    borderRadius: 15,
-  },
-  lockOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  smallCheckmark: {
-    position: 'absolute',
-    bottom: 5,
-    right: 5,
-    backgroundColor: '#e0f2f1cc',
-    borderRadius: 10,
-    padding: 1,
-  },
-  // Estilos del Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 30,
-    margin: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    flex: 1,
-    textAlign: 'center',
-  },
-  closeButton: {
-    padding: 5,
-  },
-  giftNumberContainer: {
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  giftNumberLabel: {
-    fontSize: 18,
-    color: '#666',
-    marginBottom: 10,
-  },
-  giftNumber: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#ff6b6b',
-    textShadowColor: '#ff6b6b33',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  modalButton: {
-    backgroundColor: '#ff6b6b',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 25,
-    marginTop: 20,
-  },
-  modalButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  webRoot: {
-    alignItems: 'center',
-  },
-  webScrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
-    paddingBottom: 32,
-  },
-  webInner: {
-    width: '100%',
-    maxWidth: 520,
-    alignItems: 'center',
-  },
+    container: {
+      flex: 1,
+      width: '100%',
+      alignItems: 'center',
+    },
+    scrollOuter: {
+      flexGrow: 1,
+      alignItems: 'center',
+      paddingTop: safeArea.paddingTop,
+      paddingBottom: safeArea.paddingBottom,
+      paddingHorizontal: safeArea.paddingHorizontal,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingTop: safeArea.paddingTop,
+    },
+    loadingText: {
+      color: '#fff',
+      fontSize: 18,
+      marginTop: 20,
+      fontWeight: '600',
+    },
+    dayText: {
+      fontSize: 15,
+      fontWeight: '300',
+      color: '#fff',
+      textAlign: 'center',
+      marginBottom: 16,
+      paddingHorizontal: 12,
+      lineHeight: 26,
+      textShadowColor: '#00000066',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+      fontFamily: Platform.OS === 'ios' ? 'Georgia' : undefined,
+      letterSpacing: 0.3,
+      fontStyle: 'italic',
+      maxWidth: imageSize,
+    },
+    daysLeftText: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: '#fff',
+      marginBottom: 12,
+      textShadowColor: '#00000088',
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 4,
+      textAlign: 'center',
+      maxWidth: imageSize,
+    },
+    imageContainer: {
+      width: imageSize,
+      height: imageSize,
+      borderRadius: 22,
+      overflow: 'hidden',
+      backgroundColor: '#fff',
+      shadowColor: '#000',
+      shadowOpacity: 0.28,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 12,
+      marginBottom: 14,
+    },
+    enrichingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 2,
+      backgroundColor: 'rgba(255,255,255,0.65)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    image: {
+      width: '100%',
+      height: '100%',
+    },
+    carousel: {
+      width: '100%',
+      height: '100%',
+    },
+    carouselItem: {
+      width: imageSize,
+      height: imageSize,
+    },
+    carouselImage: {
+      width: '100%',
+      height: '100%',
+      borderRadius: 22,
+    },
+    paginationContainer: {
+      position: 'absolute',
+      bottom: 14,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    paginationDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: 'rgba(255, 255, 255, 0.5)',
+      marginHorizontal: 4,
+    },
+    paginationDotActive: {
+      backgroundColor: '#fff',
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+    },
+    button: {
+      backgroundColor: '#6200eecc',
+      borderRadius: 44,
+      marginBottom: 20,
+      shadowColor: '#6200ee',
+      shadowOpacity: 0.6,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 8,
+      minHeight: 48,
+      minWidth: 48,
+    },
+    giftButtonSmall: {
+      backgroundColor: '#ff6b6b',
+      borderRadius: 32,
+      width: 64,
+      height: 64,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#ff6b6b',
+      shadowOpacity: 0.8,
+      shadowRadius: 15,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 12,
+      marginTop: 12,
+      alignSelf: 'center',
+    },
+    pressable: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 20,
+      minHeight: 48,
+      minWidth: 48,
+    },
+    giftPressable: {
+      width: '100%',
+      height: '100%',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    galleryTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: '#fff',
+      marginBottom: 10,
+      alignSelf: 'flex-start',
+      maxWidth: imageSize,
+    },
+    scroll: {
+      maxHeight: 120,
+      width: '100%',
+      maxWidth: imageSize,
+    },
+    scrollContent: {
+      paddingVertical: 4,
+      paddingHorizontal: 4,
+    },
+    thumbnailContainer: {
+      marginHorizontal: 6,
+      position: 'relative',
+      borderRadius: 16,
+      overflow: 'hidden',
+      borderWidth: 2,
+      borderColor: 'transparent',
+    },
+    thumbnailActive: {
+      borderColor: '#fff',
+      transform: [{ scale: 1.05 }],
+    },
+    thumbnailLocked: {
+      opacity: 0.35,
+    },
+    thumbnail: {
+      width: 92,
+      height: 92,
+      borderRadius: 14,
+    },
+    dayBadge: {
+      position: 'absolute',
+      top: 6,
+      left: 6,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      borderRadius: 10,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+    },
+    dayBadgeText: {
+      color: '#fff',
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    viewedBadge: {
+      position: 'absolute',
+      bottom: 6,
+      right: 6,
+      backgroundColor: 'rgba(255,255,255,0.9)',
+      borderRadius: 12,
+      padding: 1,
+    },
+    lockOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(255,255,255,0.55)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    modalContent: {
+      backgroundColor: '#fff',
+      borderRadius: 22,
+      padding: 28,
+      width: '100%',
+      maxWidth: 380,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOpacity: 0.25,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 10,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      width: '100%',
+      marginBottom: 16,
+    },
+    modalTitle: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: '#333',
+      flex: 1,
+      textAlign: 'center',
+    },
+    closeButton: {
+      padding: 8,
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    giftNumberContainer: {
+      alignItems: 'center',
+      marginVertical: 16,
+    },
+    giftNumberLabel: {
+      fontSize: 18,
+      color: '#666',
+      marginBottom: 8,
+    },
+    giftNumber: {
+      fontSize: 48,
+      fontWeight: 'bold',
+      color: '#ff6b6b',
+    },
+    modalButton: {
+      backgroundColor: '#ff6b6b',
+      paddingHorizontal: 32,
+      paddingVertical: 14,
+      borderRadius: 28,
+      marginTop: 12,
+      minHeight: 48,
+      justifyContent: 'center',
+    },
+    modalButtonText: {
+      color: '#fff',
+      fontSize: 17,
+      fontWeight: 'bold',
+    },
+    webRoot: {
+      alignItems: 'center',
+    },
+    webInner: {
+      width: '100%',
+      maxWidth: 440,
+      alignItems: 'center',
+    },
   });
 }
