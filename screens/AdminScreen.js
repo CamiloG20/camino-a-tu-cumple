@@ -136,17 +136,25 @@ export default function AdminScreen() {
 
   useEffect(() => {
     const stored = getStoredAdminPassword();
-    if (!stored) return;
+    if (!stored) return undefined;
+
+    let cancelled = false;
 
     (async () => {
       try {
         await AdminApi.getDays();
+        if (cancelled) return;
         setAuthed(true);
       } catch {
+        if (cancelled) return;
         clearStoredAdminPassword();
         setAuthed(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
