@@ -4,8 +4,16 @@ import App from './App';
 import AdminScreen from './screens/AdminScreen';
 import PwaUpdateBanner from './components/PwaUpdateBanner';
 
+function parsePreviewDay(hash) {
+  const match = hash.match(/^#\/preview\/(\d+)/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  return Number.isNaN(day) ? null : day;
+}
+
 function Root() {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [previewDayNumber, setPreviewDayNumber] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
@@ -26,11 +34,14 @@ function Root() {
 
     const updateRoute = () => {
       const { hash, pathname, search } = window.location;
+      const previewDay = parsePreviewDay(hash);
       const isAdmin =
-        hash.startsWith('#/admin') ||
-        pathname === '/admin' ||
-        pathname.endsWith('/admin') ||
-        search === '?/admin';
+        !previewDay &&
+        (hash.startsWith('#/admin') ||
+          pathname === '/admin' ||
+          pathname.endsWith('/admin') ||
+          search === '?/admin');
+      setPreviewDayNumber(previewDay);
       setIsAdmin(isAdmin);
     };
 
@@ -63,7 +74,11 @@ function Root() {
   return (
     <>
       <PwaUpdateBanner visible={updateAvailable} onReload={reloadApp} />
-      {isAdmin ? <AdminScreen /> : <App />}
+      {isAdmin ? (
+        <AdminScreen />
+      ) : (
+        <App previewDayNumber={previewDayNumber} />
+      )}
     </>
   );
 }

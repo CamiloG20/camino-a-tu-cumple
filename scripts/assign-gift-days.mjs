@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
   getScheduledGiftDayNumbers,
   getGiftNumberForDay,
+  getGiftMessage,
 } from '../lib/giftSchedule.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,6 +40,7 @@ for (const row of rows) {
     text: row.text ?? '',
     has_gift: hasGift,
     gift_number: hasGift ? giftNumber : null,
+    gift_message: hasGift ? (row.gift_message || getGiftMessage(giftNumber)) : null,
     image_path: row.image_path ?? null,
     audio_path: row.audio_path ?? null,
     photo_paths: row.photo_paths ?? [],

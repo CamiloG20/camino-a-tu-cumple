@@ -18,6 +18,37 @@ import { AdminApi, clearStoredAdminPassword, getStoredAdminPassword } from '../s
 import { getAdminApiUrl, isLocalAdminApi, STORAGE_BUCKET } from '../lib/config';
 import { getSupabase } from '../lib/supabase';
 import ProgressiveImage from '../components/ProgressiveImage';
+import AdminDayPreview from '../components/AdminDayPreview';
+import { GRADIENT_COLORS, THEME } from '../lib/layout';
+import { getGiftMessage } from '../lib/giftSchedule';
+
+function dayToForm(day) {
+  return {
+    text: day.text || '',
+    has_gift: Boolean(day.has_gift),
+    gift_number: day.gift_number != null ? String(day.gift_number) : '',
+    gift_message: day.gift_message || '',
+    image_path: day.image_path || '',
+    audio_path: day.audio_path || '',
+    photo_paths: day.photo_paths || [],
+  };
+}
+
+function formToPayload(form) {
+  return {
+    text: form.text,
+    has_gift: form.has_gift,
+    gift_number: form.gift_number ? Number(form.gift_number) : null,
+    gift_message: form.gift_message?.trim() || null,
+    image_path: form.image_path || null,
+    audio_path: form.audio_path || null,
+    photo_paths: form.photo_paths || [],
+  };
+}
+
+function formsEqual(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 function storagePathToUrl(path) {
   if (!path) return null;
@@ -65,7 +96,7 @@ function WebFileInput({ accept, onSelect, label }) {
 const webStyles = {
   fileLabel: {
     display: 'inline-block',
-    backgroundColor: '#6200ee',
+    backgroundColor: THEME.primary,
     color: '#fff',
     padding: '10px 16px',
     borderRadius: 8,
@@ -108,6 +139,7 @@ export default function AdminScreen() {
     text: '',
     has_gift: false,
     gift_number: '',
+    gift_message: '',
     image_path: '',
     audio_path: '',
     photo_paths: [],
@@ -193,6 +225,7 @@ export default function AdminScreen() {
       text: day.text || '',
       has_gift: Boolean(day.has_gift),
       gift_number: day.gift_number != null ? String(day.gift_number) : '',
+      gift_message: day.gift_message || '',
       image_path: day.image_path || '',
       audio_path: day.audio_path || '',
       photo_paths: day.photo_paths || [],
@@ -204,6 +237,75 @@ export default function AdminScreen() {
     () => days.find((item) => item.day_number === selectedDay),
     [days, selectedDay]
   );
+
+  const savedForm = useMemo(
+    () => (currentDay ? dayToForm(currentDay) : null),
+    [currentDay]
+  );
+
+  const isDirty = useMemo(
+    () => Boolean(savedForm && !formsEqual(form, savedForm)),
+    [form, savedForm]
+  );
+
+  async function persistForm(nextForm, { silent = false } = {}) {
+    if (!selectedDay) return;
+
+    if (nextForm.has_gift && nextForm.gift_number) {
+      const giftNum = Number(nextForm.gift_number);
+      if (Number.isNaN(giftNum) || giftNum < 1 || giftNum > 12) {
+        Alert.alert('Error', 'El número de regalo debe estar entre 1 y 12');
+        return;
+      }
+    }
+
+    try {
+      setBusyAction('save');
+      await AdminApi.saveDay(selectedDay, formToPayload(nextForm));
+      await loadDays(() => isMountedRef.current);
+      if (!silent) {
+        Alert.alert('Guardado', `Día ${selectedDay} actualizado`);
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message);
+      throw error;
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  function requestSelectDay(dayNumber) {
+    if (dayNumber === selectedDay) return;
+
+    if (!isDirty) {
+      setSelectedDay(dayNumber);
+      return;
+    }
+
+    Alert.alert(
+      'Cambios sin guardar',
+      'Tienes cambios pendientes en este día.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Descartar',
+          style: 'destructive',
+          onPress: () => setSelectedDay(dayNumber),
+        },
+        {
+          text: 'Guardar',
+          onPress: async () => {
+            try {
+              await persistForm(form);
+              setSelectedDay(dayNumber);
+            } catch {
+              // persistForm ya mostró el error
+            }
+          },
+        },
+      ]
+    );
+  }
 
   async function handleLogin() {
     try {
@@ -220,32 +322,7 @@ export default function AdminScreen() {
 
   async function handleSave() {
     if (!selectedDay) return;
-
-    if (form.has_gift && form.gift_number) {
-      const giftNum = Number(form.gift_number);
-      if (Number.isNaN(giftNum) || giftNum < 1 || giftNum > 12) {
-        Alert.alert('Error', 'El número de regalo debe estar entre 1 y 12');
-        return;
-      }
-    }
-
-    try {
-      setBusyAction('save');
-      await AdminApi.saveDay(selectedDay, {
-        text: form.text,
-        has_gift: form.has_gift,
-        gift_number: form.gift_number ? Number(form.gift_number) : null,
-        image_path: form.image_path || null,
-        audio_path: form.audio_path || null,
-        photo_paths: form.photo_paths,
-      });
-      await loadDays();
-      Alert.alert('Guardado', `Día ${selectedDay} actualizado`);
-    } catch (error) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setBusyAction('');
-    }
+    await persistForm(form);
   }
 
   async function handleUpload(type, file) {
@@ -294,13 +371,25 @@ export default function AdminScreen() {
   async function clearImage() {
     const path = form.image_path;
     if (path) await deletePathsFromStorage([path]);
-    setForm((prev) => ({ ...prev, image_path: '' }));
+    const nextForm = { ...form, image_path: '' };
+    setForm(nextForm);
+    try {
+      await persistForm(nextForm, { silent: true });
+    } catch {
+      // persistForm ya mostró el error
+    }
   }
 
   async function clearAudio() {
     const path = form.audio_path;
     if (path) await deletePathsFromStorage([path]);
-    setForm((prev) => ({ ...prev, audio_path: '' }));
+    const nextForm = { ...form, audio_path: '' };
+    setForm(nextForm);
+    try {
+      await persistForm(nextForm, { silent: true });
+    } catch {
+      // persistForm ya mostró el error
+    }
   }
 
   function movePhoto(index, direction) {
@@ -316,11 +405,28 @@ export default function AdminScreen() {
   async function removePhoto(index) {
     const path = form.photo_paths[index];
     if (path) await deletePathsFromStorage([path]);
-    setForm((prev) => ({
-      ...prev,
-      photo_paths: (prev.photo_paths || []).filter((_, i) => i !== index),
-    }));
+    const nextForm = {
+      ...form,
+      photo_paths: (form.photo_paths || []).filter((_, i) => i !== index),
+    };
+    setForm(nextForm);
+    try {
+      await persistForm(nextForm, { silent: true });
+    } catch {
+      // persistForm ya mostró el error
+    }
   }
+
+  function openPreviewInApp() {
+    if (!selectedDay || typeof window === 'undefined') return;
+    window.location.hash = `#/preview/${selectedDay}`;
+  }
+
+  const previewImageUrl = form.image_path ? storagePathToUrl(form.image_path) : null;
+  const previewPhotoUrls = (form.photo_paths || [])
+    .map((path) => storagePathToUrl(path))
+    .filter(Boolean);
+  const previewAudioUrl = form.audio_path ? storagePathToUrl(form.audio_path) : null;
 
   function handleLogout() {
     clearStoredAdminPassword();
@@ -339,7 +445,7 @@ export default function AdminScreen() {
 
   if (!authed) {
     return (
-      <LinearGradient colors={['#1a1a2e', '#16213e']} style={styles.container}>
+      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
         <StatusBar style="light" />
         <View style={styles.loginCard}>
           <Text style={styles.title}>Panel Admin</Text>
@@ -377,7 +483,7 @@ export default function AdminScreen() {
   }
 
   return (
-    <LinearGradient colors={['#1a1a2e', '#0f3460']} style={styles.container}>
+    <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
         <View>
@@ -416,7 +522,9 @@ export default function AdminScreen() {
               <TouchableOpacity
                 key={day.day_number}
                 style={[styles.dayChip, selectedDay === day.day_number && styles.dayChipActive]}
-                onPress={() => setSelectedDay(day.day_number)}
+                onPress={() => requestSelectDay(day.day_number)}
+                accessibilityRole="button"
+                accessibilityLabel={`Editar día ${day.day_number}`}
               >
                 <Text style={styles.dayChipText}>Día {day.day_number}</Text>
               </TouchableOpacity>
@@ -426,6 +534,12 @@ export default function AdminScreen() {
           <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
             {currentDay ? (
               <>
+                {isDirty ? (
+                  <View style={styles.unsavedBanner} accessibilityRole="alert">
+                    <Text style={styles.unsavedBannerText}>Tienes cambios sin guardar</Text>
+                  </View>
+                ) : null}
+
                 <Text style={styles.panelTitle}>Editar día {selectedDay}</Text>
 
                 <Text style={styles.label}>Mensaje</Text>
@@ -449,9 +563,27 @@ export default function AdminScreen() {
                     <Text style={styles.label}>Número de regalo</Text>
                     <TextInput
                       value={form.gift_number}
-                      onChangeText={(gift_number) => setForm((prev) => ({ ...prev, gift_number }))}
+                      onChangeText={(gift_number) =>
+                        setForm((prev) => {
+                          const num = Number(gift_number);
+                          const next = { ...prev, gift_number };
+                          if (!prev.gift_message && gift_number && !Number.isNaN(num)) {
+                            next.gift_message = getGiftMessage(num);
+                          }
+                          return next;
+                        })
+                      }
                       keyboardType="number-pad"
                       style={styles.input}
+                    />
+                    <Text style={styles.label}>Mensaje del regalo (lo que verá en el modal)</Text>
+                    <TextInput
+                      value={form.gift_message}
+                      onChangeText={(gift_message) => setForm((prev) => ({ ...prev, gift_message }))}
+                      multiline
+                      placeholder="Texto personalizado para este regalo..."
+                      placeholderTextColor="#999"
+                      style={[styles.input, styles.giftMessageArea]}
                     />
                   </>
                 )}
@@ -594,15 +726,26 @@ export default function AdminScreen() {
                   </>
                 ) : null}
 
+                <AdminDayPreview
+                  dayNumber={selectedDay}
+                  form={form}
+                  imageUrl={previewImageUrl}
+                  photoUrls={previewPhotoUrls}
+                  audioUrl={previewAudioUrl}
+                  onOpenInApp={openPreviewInApp}
+                />
+
                 <TouchableOpacity
-                  style={[styles.primaryBtn, styles.saveBtn]}
+                  style={[styles.primaryBtn, styles.saveBtn, !isDirty && styles.saveBtnDisabled]}
                   onPress={handleSave}
-                  disabled={busyAction === 'save'}
+                  disabled={busyAction === 'save' || !isDirty}
                 >
                   {busyAction === 'save' ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.primaryBtnText}>Guardar cambios</Text>
+                    <Text style={styles.primaryBtnText}>
+                      {isDirty ? 'Guardar cambios' : 'Sin cambios pendientes'}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </>
@@ -666,7 +809,7 @@ const createStyles = (isNarrow) =>
     borderRadius: 8,
     backgroundColor: '#1e293b',
   },
-  dayChipActive: { backgroundColor: '#6200ee' },
+  dayChipActive: { backgroundColor: THEME.primary },
   dayChipText: { color: '#fff', fontWeight: '600' },
   panel: { flex: 1 },
   panelContent: { padding: 24, maxWidth: 720 },
@@ -730,15 +873,29 @@ const createStyles = (isNarrow) =>
     borderColor: '#334155',
   },
   textArea: { minHeight: 120, textAlignVertical: 'top' },
+  giftMessageArea: { minHeight: 90, textAlignVertical: 'top' },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
   primaryBtn: {
-    backgroundColor: '#6200ee',
+    backgroundColor: THEME.primary,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 16,
   },
-  saveBtn: { backgroundColor: '#ff6b6b' },
+  saveBtn: { backgroundColor: THEME.accent },
+  saveBtnDisabled: { opacity: 0.55 },
+  unsavedBanner: {
+    backgroundColor: 'rgba(251, 191, 36, 0.95)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  unsavedBannerText: {
+    color: '#78350f',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'center',
+  },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondaryBtn: {
     backgroundColor: '#334155',

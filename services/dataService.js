@@ -1,5 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSupabase } from '../lib/supabase';
 import { isSupabaseConfigured, STORAGE_BUCKET } from '../lib/config';
+import { TOTAL_EVENT_DAYS } from '../lib/calendar';
+
+const DAYS_CACHE_KEY = 'daysCache_v1';
 
 const PLACEHOLDER_IMAGE =
   'https://via.placeholder.com/400x400/cccccc/ffffff?text=Imagen+no+disponible';
@@ -13,6 +17,7 @@ function mapDayRow(row) {
     audioPath: row.audio_path ?? row.audioPath ?? null,
     hasGift: Boolean(row.has_gift ?? row.hasGift),
     giftNumber: row.gift_number ?? row.giftNumber ?? null,
+    giftMessage: row.gift_message ?? row.giftMessage ?? null,
     photoPaths: row.photo_paths ?? row.photoPaths ?? [],
   };
 }
@@ -107,6 +112,35 @@ export class DataService {
   }
 
   /** Carga rápida: solo metadatos + URL de imagen principal (sin listar Storage ni audio) */
+  /** Carga ligera con caché offline de los 32 días. */
+  static async loadDaysWithCache() {
+    try {
+      const days = await this.getAllDaysLight();
+      await AsyncStorage.setItem(DAYS_CACHE_KEY, JSON.stringify(days)).catch(() => {});
+      return { days, fromCache: false };
+    } catch (error) {
+      const cached = await this.getCachedDays();
+      if (cached) {
+        return { days: cached, fromCache: true };
+      }
+      throw error;
+    }
+  }
+
+  static async getCachedDays() {
+    try {
+      const raw = await AsyncStorage.getItem(DAYS_CACHE_KEY);
+      if (!raw) return null;
+      const days = JSON.parse(raw);
+      if (!Array.isArray(days) || days.length < TOTAL_EVENT_DAYS) {
+        return null;
+      }
+      return days;
+    } catch {
+      return null;
+    }
+  }
+
   static async getAllDaysLight() {
     if (!isSupabaseConfigured()) {
       throw new Error('Supabase no está configurado');

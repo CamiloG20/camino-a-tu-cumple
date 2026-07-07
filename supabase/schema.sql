@@ -8,6 +8,7 @@ create table if not exists public.days (
   audio_path text,
   has_gift boolean default false,
   gift_number int,
+  gift_message text,
   photo_paths text[] default '{}'
 );
 

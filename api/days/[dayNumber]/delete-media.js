@@ -46,6 +46,7 @@ export default async function handler(req, res) {
         text: existing.text ?? '',
         has_gift: existing.has_gift ?? false,
         gift_number: existing.gift_number ?? null,
+        gift_message: existing.gift_message ?? null,
         image_path: paths.includes(existing.image_path) ? null : existing.image_path,
         audio_path: paths.includes(existing.audio_path) ? null : existing.audio_path,
         photo_paths: (existing.photo_paths || []).filter((path) => !paths.includes(path)),

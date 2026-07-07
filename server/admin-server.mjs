@@ -99,6 +99,7 @@ app.put('/api/days/:dayNumber', requireAdmin, async (req, res) => {
       audio_path: body.audio_path ?? null,
       has_gift: Boolean(body.has_gift),
       gift_number: body.gift_number ?? null,
+      gift_message: body.gift_message?.trim() || null,
       photo_paths: Array.isArray(body.photo_paths) ? body.photo_paths : [],
     };
 
@@ -160,6 +161,7 @@ app.post('/api/days/:dayNumber/upload', requireAdmin, upload.single('file'), asy
       text: existing?.text ?? '',
       has_gift: existing?.has_gift ?? false,
       gift_number: existing?.gift_number ?? null,
+      gift_message: existing?.gift_message ?? null,
       photo_paths: existing?.photo_paths ?? [],
       image_path: existing?.image_path ?? null,
       audio_path: existing?.audio_path ?? null,
@@ -217,6 +219,7 @@ app.post('/api/days/:dayNumber/download-audio', requireAdmin, async (req, res) =
       audio_path: storagePath,
       has_gift: existing?.has_gift ?? false,
       gift_number: existing?.gift_number ?? null,
+      gift_message: existing?.gift_message ?? null,
       photo_paths: existing?.photo_paths ?? [],
     };
 
@@ -265,6 +268,7 @@ app.post('/api/days/:dayNumber/delete-media', requireAdmin, async (req, res) => 
         text: existing.text ?? '',
         has_gift: existing.has_gift ?? false,
         gift_number: existing.gift_number ?? null,
+        gift_message: existing.gift_message ?? null,
         image_path: paths.includes(existing.image_path) ? null : existing.image_path,
         audio_path: paths.includes(existing.audio_path) ? null : existing.audio_path,
         photo_paths: (existing.photo_paths || []).filter((path) => !paths.includes(path)),

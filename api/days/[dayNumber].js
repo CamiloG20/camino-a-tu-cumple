@@ -42,6 +42,7 @@ export default async function handler(req, res) {
       audio_path: body.audio_path ?? null,
       has_gift: Boolean(body.has_gift),
       gift_number: body.gift_number ?? null,
+      gift_message: body.gift_message?.trim() || null,
       photo_paths: Array.isArray(body.photo_paths) ? body.photo_paths : [],
     };
 

@@ -19,8 +19,8 @@ import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { DataService } from './services/dataService';
 import { isSupabaseConfigured } from './lib/config';
-import { getDaysUntilBirthday, getTodayDayIndex } from './lib/calendar';
-import { GRADIENT_COLORS, getContentWidth, safeArea } from './lib/layout';
+import { getDaysUntilBirthday, getTodayDayIndex, getCalendarDateForDayNumber, formatCalendarDate } from './lib/calendar';
+import { GRADIENT_COLORS, BIRTHDAY_GRADIENT_COLORS, getContentWidth, safeArea } from './lib/layout';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import ProgressiveImage from './components/ProgressiveImage';
@@ -29,7 +29,7 @@ import OfflineScreen from './components/OfflineScreen';
 import AudioSeekBar from './components/AudioSeekBar';
 import GiftModal from './components/GiftModal';
 import FallbackBanner from './components/FallbackBanner';
-import { getGiftMessage } from './lib/giftSchedule';
+import { getGiftMessage, resolveGiftMessage } from './lib/giftSchedule';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
 const VIEWED_KEY = 'viewedImages';
@@ -44,7 +44,8 @@ function parseStorageJson(value, fallback = {}) {
   }
 }
 
-export default function App() {
+export default function App({ previewDayNumber = null }) {
+  const adminPreview = previewDayNumber != null;
   const { width: windowWidth } = useWindowDimensions();
   const screenWidth = getContentWidth(windowWidth);
   const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
@@ -64,11 +65,18 @@ export default function App() {
   const [realTodayIndex, setRealTodayIndex] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
+  const [usingCache, setUsingCache] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [openedGifts, setOpenedGifts] = useState({});
   const [giftMessage, setGiftMessage] = useState('');
   const flatListRef = useRef(null);
   const galleryRef = useRef(null);
+  const dayNavTokenRef = useRef(0);
+  const realTodayIndexRef = useRef(0);
+
+  useEffect(() => {
+    realTodayIndexRef.current = realTodayIndex;
+  }, [realTodayIndex]);
 
   const {
     hasValidAudio,
@@ -97,7 +105,7 @@ export default function App() {
     (day) => {
       if (!day?.hasGift || day.giftNumber == null) return;
       setGiftNumber(day.giftNumber);
-      setGiftMessage(getGiftMessage(day.giftNumber));
+      setGiftMessage(resolveGiftMessage(day));
       setShowGiftModal(true);
       markGiftOpened(day.dayNumber);
     },
@@ -116,6 +124,10 @@ export default function App() {
 
   const applyDayAtIndex = useCallback(
     async (daysList, index, isActive = () => true) => {
+      if (index > realTodayIndexRef.current) {
+        return null;
+      }
+
       let day = daysList[index];
       if (!day?.enriched) {
         setEnrichingDay(true);
@@ -154,29 +166,42 @@ export default function App() {
         setLoading(true);
         setLoadError(false);
         setUsingFallback(false);
-
-        if (Platform.OS === 'web' && typeof navigator !== 'undefined' && !navigator.onLine) {
-          throw new Error('Sin conexión');
-        }
+        setUsingCache(false);
 
         let daysData;
         let fallback = false;
+        let fromCache = false;
 
         try {
           if (!isSupabaseConfigured()) {
             throw new Error('Supabase no configurado');
           }
-          daysData = await DataService.getAllDaysLight();
+          const result = await DataService.loadDaysWithCache();
+          daysData = result.days;
+          fromCache = result.fromCache;
         } catch (dataError) {
-          console.warn('⚠️ Error con Supabase, usando datos de fallback:', dataError);
-          daysData = await DataService.getFallbackData();
-          fallback = true;
+          console.warn('⚠️ Error con Supabase:', dataError);
+          const cached = await DataService.getCachedDays();
+          if (cached) {
+            daysData = cached;
+            fromCache = true;
+          } else {
+            daysData = await DataService.getFallbackData();
+            fallback = true;
+          }
         }
 
         if (cancelled) return;
 
         const calculatedDiff = getDaysUntilBirthday();
-        const index = getTodayDayIndex(daysData.length, calculatedDiff);
+        let index = getTodayDayIndex(daysData.length, calculatedDiff);
+
+        if (adminPreview) {
+          const previewIndex = daysData.findIndex((d) => d.dayNumber === previewDayNumber);
+          if (previewIndex >= 0) {
+            index = previewIndex;
+          }
+        }
 
         const viewedData = await AsyncStorage.getItem(VIEWED_KEY);
         const openedData = await AsyncStorage.getItem(OPENED_GIFTS_KEY);
@@ -186,10 +211,11 @@ export default function App() {
         setOpenedGifts(parseStorageJson(openedData));
         setDays(daysData);
         setDiff(calculatedDiff);
-        setRealTodayIndex(index);
+        setRealTodayIndex(adminPreview ? daysData.length - 1 : index);
         setTodayIndex(index);
         setCurrentDay(daysData[index]);
         setUsingFallback(fallback);
+        setUsingCache(fromCache && !fallback);
 
         await applyDayAtIndex(daysData, index, () => !cancelled);
       } catch (error) {
@@ -209,7 +235,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [reloadToken, applyDayAtIndex]);
+  }, [reloadToken, applyDayAtIndex, adminPreview, previewDayNumber]);
 
   useEffect(() => {
     if (loading || !currentDay?.hasGift || todayIndex !== realTodayIndex) return;
@@ -249,12 +275,30 @@ export default function App() {
     setGiftMessage('');
   }
 
+  const effectiveTodayIndex = adminPreview ? days.length - 1 : realTodayIndex;
+
   async function onPressImage(index) {
-    if (index > realTodayIndex) {
+    if (index > effectiveTodayIndex) {
       Alert.alert('Bloqueado', 'No puedes ver días futuros.');
       return;
     }
-    await applyDayAtIndex(days, index);
+    const token = ++dayNavTokenRef.current;
+    const isActive = () => dayNavTokenRef.current === token;
+    await applyDayAtIndex(days, index, isActive);
+  }
+
+  const previewBaseIndex = adminPreview
+    ? days.findIndex((d) => d.dayNumber === previewDayNumber)
+    : realTodayIndex;
+
+  function goToToday() {
+    const targetIndex = adminPreview
+      ? (previewBaseIndex >= 0 ? previewBaseIndex : realTodayIndex)
+      : realTodayIndex;
+    if (todayIndex === targetIndex) return;
+    const token = ++dayNavTokenRef.current;
+    const isActive = () => dayNavTokenRef.current === token;
+    applyDayAtIndex(days, targetIndex, isActive);
   }
 
   const renderPhotoItem = ({ item }) => (
@@ -278,22 +322,73 @@ export default function App() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  const viewingPastDay = todayIndex !== realTodayIndex;
+  const viewingPastDay = adminPreview
+    ? previewBaseIndex >= 0 && todayIndex !== previewBaseIndex
+    : todayIndex !== realTodayIndex;
   const isBirthdayDay = diff === 0 && !viewingPastDay;
+  const calendarDateLabel = currentDay
+    ? formatCalendarDate(getCalendarDateForDayNumber(currentDay.dayNumber))
+    : '';
   const headerText = isBirthdayDay
     ? '¡Feliz cumpleaños! 🎂❤️'
     : viewingPastDay && currentDay
       ? `Viendo el día ${currentDay.dayNumber}`
       : `Faltan ${diff} días 🎂❤️`;
 
+  const activeGradient = isBirthdayDay ? BIRTHDAY_GRADIENT_COLORS : GRADIENT_COLORS;
+
   const mainContent = (
     <>
       <InstallPwaBanner />
+      {adminPreview ? (
+        <View style={styles.previewBanner}>
+          <Text style={styles.previewBannerText}>
+            Vista previa admin — día {previewDayNumber} (puedes navegar todos los días)
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              if (typeof window !== 'undefined') window.location.hash = '#/admin';
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Volver al panel admin"
+          >
+            <Text style={styles.previewBannerLink}>← Volver al admin</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       {usingFallback ? <FallbackBanner /> : null}
+      {usingCache ? (
+        <View style={styles.cacheBanner} accessibilityRole="text">
+          <Text style={styles.cacheBannerText}>Modo sin conexión: mostrando el calendario guardado.</Text>
+        </View>
+      ) : null}
 
-      <Text style={styles.daysLeftText} accessibilityRole="header">
+      <Text
+        style={[styles.daysLeftText, isBirthdayDay && styles.birthdayHeaderText]}
+        accessibilityRole="header"
+      >
         {headerText}
       </Text>
+
+      {currentDay ? (
+        <Text style={styles.calendarDateText}>
+          Día {currentDay.dayNumber} · {calendarDateLabel}
+        </Text>
+      ) : null}
+
+      {viewingPastDay ? (
+        <TouchableOpacity
+          style={styles.backToTodayBtn}
+          onPress={goToToday}
+          accessibilityRole="button"
+          accessibilityLabel={adminPreview ? `Volver al día ${previewDayNumber}` : 'Volver al día de hoy'}
+        >
+          <MaterialIcons name="today" size={18} color="#fff" />
+          <Text style={styles.backToTodayText}>
+            {adminPreview ? `Volver al día ${previewDayNumber}` : 'Volver a hoy'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       {currentDay && (
         <>
@@ -304,7 +399,7 @@ export default function App() {
             key={`day-${currentDay.dayNumber}`}
             entering={FadeIn.duration(280)}
             exiting={FadeOut.duration(180)}
-            style={styles.imageContainer}
+            style={[styles.imageContainer, isBirthdayDay && styles.birthdayImageContainer]}
           >
             {enrichingDay ? (
               <View style={styles.enrichingOverlay}>
@@ -347,6 +442,12 @@ export default function App() {
                     />
                   ))}
                 </View>
+                {currentDay.hasGift ? (
+                  <View style={styles.imageGiftBadge}>
+                    <MaterialIcons name="card-giftcard" size={22} color="#fff" />
+                    <Text style={styles.imageGiftBadgeText}>Regalo</Text>
+                  </View>
+                ) : null}
               </>
             ) : (
               <View style={styles.imageWrap}>
@@ -366,50 +467,52 @@ export default function App() {
             )}
           </Animated.View>
 
-          <Animated.View style={[styles.button, audioButtonStyle]}>
-            <Pressable
-              onPress={togglePlayback}
-              disabled={audioLoading}
-              android_ripple={{ color: '#fff' }}
-              style={styles.pressable}
-              accessibilityRole="button"
-              accessibilityLabel={isPlaying ? 'Pausar canción' : 'Reproducir canción del día'}
-              accessibilityState={{ disabled: audioLoading }}
-            >
-              {audioLoading ? (
-                <ActivityIndicator color="#fff" size="large" />
-              ) : (
-                <MaterialIcons
-                  name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
-                  size={48}
-                  color="#fff"
-                />
-              )}
-            </Pressable>
-          </Animated.View>
-
           {hasValidAudio ? (
-            <View style={styles.audioControls}>
-              <View style={styles.audioTimeRow}>
-                <Text style={styles.audioTime}>{formatAudioTime(audioPosition)}</Text>
-                <Text style={styles.audioTime}>{formatAudioTime(audioDuration)}</Text>
+            <>
+              <Animated.View style={[styles.button, audioButtonStyle]}>
+                <Pressable
+                  onPress={togglePlayback}
+                  disabled={audioLoading}
+                  android_ripple={{ color: '#fff' }}
+                  style={styles.pressable}
+                  accessibilityRole="button"
+                  accessibilityLabel={isPlaying ? 'Pausar canción' : 'Reproducir canción del día'}
+                  accessibilityState={{ disabled: audioLoading }}
+                >
+                  {audioLoading ? (
+                    <ActivityIndicator color="#fff" size="large" />
+                  ) : (
+                    <MaterialIcons
+                      name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
+                      size={48}
+                      color="#fff"
+                    />
+                  )}
+                </Pressable>
+              </Animated.View>
+
+              <View style={styles.audioControls}>
+                <View style={styles.audioTimeRow}>
+                  <Text style={styles.audioTime}>{formatAudioTime(audioPosition)}</Text>
+                  <Text style={styles.audioTime}>{formatAudioTime(audioDuration)}</Text>
+                </View>
+                <AudioSeekBar
+                  position={audioPosition}
+                  duration={audioDuration}
+                  currentTimeLabel={formatAudioTime(audioPosition)}
+                  durationLabel={formatAudioTime(audioDuration)}
+                  onSeekStart={handleSeekStart}
+                  onSeek={setAudioPosition}
+                  onSeekComplete={handleSeekComplete}
+                  disabled={!hasValidAudio || audioLoading}
+                />
               </View>
-              <AudioSeekBar
-                position={audioPosition}
-                duration={audioDuration}
-                currentTimeLabel={formatAudioTime(audioPosition)}
-                durationLabel={formatAudioTime(audioDuration)}
-                onSeekStart={handleSeekStart}
-                onSeek={setAudioPosition}
-                onSeekComplete={handleSeekComplete}
-                disabled={!hasValidAudio || audioLoading}
-              />
-            </View>
+            </>
           ) : null}
         </>
       )}
 
-      <Text style={styles.galleryTitle}>Galería de días anteriores</Text>
+      <Text style={styles.galleryTitle}>Galería de días</Text>
 
       <ScrollView
         ref={galleryRef}
@@ -421,7 +524,7 @@ export default function App() {
       >
         {days.map((day, i) => {
           const isActive = i === todayIndex;
-          const isLocked = i > realTodayIndex;
+          const isLocked = i > effectiveTodayIndex;
           const isViewed = viewed[String(day.dayNumber)];
           const hasGift = day.hasGift;
           const giftOpened = openedGifts[String(day.dayNumber)];
@@ -534,7 +637,7 @@ export default function App() {
 
   return (
     <LinearGradient
-      colors={GRADIENT_COLORS}
+      colors={activeGradient}
       style={[styles.container, Platform.OS === 'web' && styles.webRoot]}
     >
       <StatusBar style="light" />
@@ -605,12 +708,78 @@ function createStyles(screenWidth) {
       fontSize: 26,
       fontWeight: '800',
       color: '#fff',
-      marginBottom: 12,
+      marginBottom: 6,
       textShadowColor: '#00000088',
       textShadowOffset: { width: 0, height: 2 },
       textShadowRadius: 4,
       textAlign: 'center',
       maxWidth: imageSize,
+    },
+    birthdayHeaderText: {
+      fontSize: 30,
+      letterSpacing: 0.5,
+    },
+    calendarDateText: {
+      color: '#f1f5f9',
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 10,
+      textAlign: 'center',
+      opacity: 0.95,
+    },
+    backToTodayBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      borderRadius: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.35)',
+    },
+    backToTodayText: {
+      color: '#fff',
+      fontWeight: '700',
+      fontSize: 14,
+    },
+    cacheBanner: {
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      borderRadius: 10,
+      padding: 10,
+      marginBottom: 10,
+      width: '100%',
+      maxWidth: imageSize,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.2)',
+    },
+    cacheBannerText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    previewBanner: {
+      width: '100%',
+      maxWidth: imageSize,
+      backgroundColor: 'rgba(251, 191, 36, 0.95)',
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 12,
+      gap: 6,
+    },
+    previewBannerText: {
+      color: '#78350f',
+      fontSize: 12,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    previewBannerLink: {
+      color: '#6a11cb',
+      fontWeight: '800',
+      fontSize: 13,
+      textAlign: 'center',
     },
     imageContainer: {
       width: imageSize,
@@ -624,6 +793,13 @@ function createStyles(screenWidth) {
       shadowOffset: { width: 0, height: 6 },
       elevation: 12,
       marginBottom: 14,
+    },
+    birthdayImageContainer: {
+      borderWidth: 3,
+      borderColor: '#fbbf24',
+      shadowColor: '#ff6b6b',
+      shadowOpacity: 0.5,
+      shadowRadius: 20,
     },
     enrichingOverlay: {
       ...StyleSheet.absoluteFillObject,
@@ -694,10 +870,10 @@ function createStyles(screenWidth) {
       borderRadius: 6,
     },
     button: {
-      backgroundColor: '#6200eecc',
+      backgroundColor: '#6a11cbcc',
       borderRadius: 44,
       marginBottom: 20,
-      shadowColor: '#6200ee',
+      shadowColor: '#6a11cb',
       shadowOpacity: 0.6,
       shadowRadius: 10,
       shadowOffset: { width: 0, height: 5 },
@@ -773,8 +949,8 @@ function createStyles(screenWidth) {
       maxWidth: imageSize,
     },
     scrollContent: {
-      paddingVertical: 4,
-      paddingHorizontal: 4,
+      paddingVertical: 8,
+      paddingHorizontal: 8,
     },
     thumbnailContainer: {
       marginHorizontal: 6,
