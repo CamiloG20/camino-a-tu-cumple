@@ -11,12 +11,32 @@ function Root() {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
 
+    const normalizeAdminUrl = () => {
+      const { hash, pathname, search } = window.location;
+      const isAdminPath =
+        hash.startsWith('#/admin') ||
+        pathname === '/admin' ||
+        pathname.endsWith('/admin') ||
+        search === '?/admin';
+
+      if (isAdminPath && !hash.startsWith('#/admin')) {
+        window.history.replaceState(null, '', `${window.location.origin}/#/admin`);
+      }
+    };
+
     const updateRoute = () => {
-      setIsAdmin(window.location.hash.startsWith('#/admin'));
+      const { hash, pathname, search } = window.location;
+      const isAdmin =
+        hash.startsWith('#/admin') ||
+        pathname === '/admin' ||
+        pathname.endsWith('/admin') ||
+        search === '?/admin';
+      setIsAdmin(isAdmin);
     };
 
     const onPwaUpdate = () => setUpdateAvailable(true);
 
+    normalizeAdminUrl();
     updateRoute();
     if (window.__PWA_UPDATE_AVAILABLE__) {
       setUpdateAvailable(true);

@@ -14,8 +14,10 @@
     "setup:vercel-env": "node scripts/setup-vercel-env.mjs",
     "migrate:firebase": "node scripts/migrate-firebase-to-supabase.mjs",
     "migrate:supabase": "node scripts/migrate-supabase-project.mjs",
+    "migrate:supabase:days": "node scripts/migrate-supabase-project.mjs --days-only",
     "setup:party-bel": "node scripts/setup-party-bel-schema.mjs",
     "assign:gifts": "node scripts/assign-gift-days.mjs",
+    "verify:project": "node scripts/verify-project.mjs",
     "admin:server": "node server/admin-server.mjs",
     "dev:admin": "node server/admin-server.mjs"
   },
@@ -30,6 +32,7 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "multer": "^1.4.5-lts.2",
+    "formidable": "^3.5.4",
     "yt-dlp-wrap": "^2.3.12",
     "react": "19.0.0",
     "react-native": "0.79.5",

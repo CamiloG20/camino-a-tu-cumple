@@ -56,13 +56,17 @@ async function ensureBucket(supabase, bucket) {
   console.log(`✓ Bucket "${bucket}" creado en destino`);
 }
 
+async function daysTableReady(dest) {
+  const { error } = await dest.from('days').select('day_number').limit(1);
+  return !error;
+}
+
 async function ensureDaysTable(env) {
   const dest = createClient(env.EXPO_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { error } = await dest.from('days').select('day_number').limit(1);
-  if (!error) {
+  if (await daysTableReady(dest)) {
     console.log('✓ Tabla "days" accesible en destino');
     return;
   }
@@ -136,8 +140,23 @@ async function listAllFiles(supabase, bucket, prefix = '') {
   return files;
 }
 
-async function downloadPublicFile(baseUrl, bucket, path) {
-  const url = `${baseUrl}/storage/v1/object/public/${bucket}/${path}`;
+function encodeStoragePath(path) {
+  return path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+}
+
+async function downloadFromSource(source, sourceUrl, bucket, path) {
+  const { data, error } = await source.storage.from(bucket).download(path);
+  if (!error && data) {
+    return {
+      buffer: Buffer.from(await data.arrayBuffer()),
+      contentType: guessContentType(path),
+    };
+  }
+
+  const url = `${sourceUrl}/storage/v1/object/public/${bucket}/${encodeStoragePath(path)}`;
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`No se pudo descargar ${path}: ${response.status}`);
@@ -151,6 +170,7 @@ async function downloadPublicFile(baseUrl, bucket, path) {
 async function main() {
   const env = loadEnv();
   const bucket = env.EXPO_PUBLIC_SUPABASE_STORAGE_BUCKET || 'media';
+  const daysOnly = process.argv.includes('--days-only');
 
   const sourceUrl = env.SOURCE_SUPABASE_URL?.trim();
   const sourceKey = env.SOURCE_SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -180,7 +200,6 @@ async function main() {
 
   console.log('\n🔧 Preparando destino (Party-Bel_Amour)...');
   await ensureBucket(dest, bucket);
-  await ensureDaysTable(env);
 
   console.log('\n📋 Leyendo días del origen...');
   const { data: days, error: daysError } = await source
@@ -190,31 +209,60 @@ async function main() {
   if (daysError) throw daysError;
   console.log(`✓ ${days.length} días encontrados`);
 
-  console.log('\n📁 Listando archivos en Storage del origen...');
-  const allFiles = await listAllFiles(source, bucket);
-  console.log(`✓ ${allFiles.length} archivos en bucket "${bucket}"`);
+  let pathsCopied = 0;
 
-  const pathsToCopy = new Set(allFiles);
-  for (const day of days) {
-    if (day.image_path && !day.image_path.startsWith('http')) pathsToCopy.add(day.image_path);
-    if (day.audio_path && !day.audio_path.startsWith('http')) pathsToCopy.add(day.audio_path);
-    for (const p of day.photo_paths ?? []) {
-      if (p && !p.startsWith('http')) pathsToCopy.add(p);
+  if (!daysOnly) {
+    console.log('\n📁 Listando archivos en Storage del origen...');
+    const allFiles = await listAllFiles(source, bucket);
+    console.log(`✓ ${allFiles.length} archivos en bucket "${bucket}"`);
+
+    const pathsToCopy = new Set(allFiles);
+    for (const day of days) {
+      if (day.image_path && !day.image_path.startsWith('http')) pathsToCopy.add(day.image_path);
+      if (day.audio_path && !day.audio_path.startsWith('http')) pathsToCopy.add(day.audio_path);
+      for (const p of day.photo_paths ?? []) {
+        if (p && !p.startsWith('http')) pathsToCopy.add(p);
+      }
+    }
+
+    console.log(`\n⬆️  Copiando ${pathsToCopy.size} archivos al destino...`);
+    let copied = 0;
+    const skipped = [];
+    for (const path of [...pathsToCopy].sort()) {
+      let buffer;
+      let contentType;
+      try {
+        ({ buffer, contentType } = await downloadFromSource(source, sourceUrl, bucket, path));
+      } catch (err) {
+        skipped.push({ path, reason: err.message });
+        continue;
+      }
+      const { error } = await dest.storage.from(bucket).upload(path, buffer, {
+        upsert: true,
+        contentType,
+      });
+      if (error) throw error;
+      copied += 1;
+      if (copied % 10 === 0 || copied === pathsToCopy.size) {
+        console.log(`  · ${copied}/${pathsToCopy.size} archivos`);
+      }
+    }
+    pathsCopied = copied;
+    if (skipped.length) {
+      console.log(`  ⚠️  ${skipped.length} archivo(s) omitido(s):`);
+      skipped.forEach((s) => console.log(`     - ${s.path}`));
     }
   }
 
-  console.log(`\n⬆️  Copiando ${pathsToCopy.size} archivos al destino...`);
-  let copied = 0;
-  for (const path of [...pathsToCopy].sort()) {
-    const { buffer, contentType } = await downloadPublicFile(sourceUrl, bucket, path);
-    const { error } = await dest.storage.from(bucket).upload(path, buffer, {
-      upsert: true,
-      contentType,
-    });
-    if (error) throw error;
-    copied += 1;
-    if (copied % 10 === 0 || copied === pathsToCopy.size) {
-      console.log(`  · ${copied}/${pathsToCopy.size} archivos`);
+  const tableReady = await daysTableReady(dest);
+  if (!tableReady) {
+    try {
+      await ensureDaysTable(env);
+    } catch (err) {
+      if (!daysOnly) {
+        console.log(`\n⚠️  Archivos copiados (${pathsCopied}), pero falta la tabla "days".`);
+      }
+      throw err;
     }
   }
 
@@ -224,7 +272,7 @@ async function main() {
 
   const gifts = days.filter((d) => d.has_gift).length;
   console.log(`\n✅ Migración completa → ${destUrl}`);
-  console.log(`   ${days.length} días, ${gifts} regalos, ${pathsToCopy.size} archivos\n`);
+  console.log(`   ${days.length} días, ${gifts} regalos${daysOnly ? '' : `, ${pathsCopied} archivos`}\n`);
 }
 
 main().catch((err) => {
