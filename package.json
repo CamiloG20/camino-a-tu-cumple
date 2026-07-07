@@ -18,6 +18,8 @@
     "setup:party-bel": "node scripts/setup-party-bel-schema.mjs",
     "assign:gifts": "node scripts/assign-gift-days.mjs",
     "verify:project": "node scripts/verify-project.mjs",
+    "clean:vercel-env": "node scripts/clean-vercel-env.mjs",
+    "fix:day1-photo": "node scripts/fix-day1-photo.mjs",
     "admin:server": "node server/admin-server.mjs",
     "dev:admin": "node server/admin-server.mjs"
   },

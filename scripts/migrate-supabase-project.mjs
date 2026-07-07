@@ -267,7 +267,8 @@ async function main() {
   }
 
   console.log('\n💾 Insertando filas en tabla "days"...');
-  const { error: upsertError } = await dest.from('days').upsert(days, { onConflict: 'day_number' });
+  const rows = days.map(({ id, ...row }) => row);
+  const { error: upsertError } = await dest.from('days').upsert(rows, { onConflict: 'day_number' });
   if (upsertError) throw upsertError;
 
   const gifts = days.filter((d) => d.has_gift).length;

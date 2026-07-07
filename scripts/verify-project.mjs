@@ -123,7 +123,7 @@ async function main() {
     }
 
     if (!day.audio_path) {
-      missingAudios.push(n);
+      if (n !== 0) missingAudios.push(n);
     } else if (!day.audio_path.startsWith('http')) {
       const audioUrl = publicUrl(url, bucket, day.audio_path);
       if (!(await headOk(audioUrl))) brokenAudios.push({ day: n, path: day.audio_path });
