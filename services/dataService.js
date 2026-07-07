@@ -1,6 +1,5 @@
 import { getSupabase } from '../lib/supabase';
 import { isSupabaseConfigured, STORAGE_BUCKET } from '../lib/config';
-import { applyGiftScheduleToDay } from '../lib/giftSchedule';
 
 const PLACEHOLDER_IMAGE =
   'https://via.placeholder.com/400x400/cccccc/ffffff?text=Imagen+no+disponible';
@@ -40,37 +39,6 @@ async function resolveMediaUrl(path) {
   return getStoragePublicUrl(path.replace(/^\/+/, ''));
 }
 
-async function listStoragePhotos(dayNumber) {
-  const supabase = getSupabase();
-  const folders = [`photos/day${dayNumber}`, `days/${dayNumber}/photos`];
-  const urls = [];
-
-  for (const folder of folders) {
-    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).list(folder, {
-      limit: 100,
-      sortBy: { column: 'name', order: 'asc' },
-    });
-
-    if (error || !data?.length) {
-      continue;
-    }
-
-    for (const file of data) {
-      if (!file.name || file.name.endsWith('/')) {
-        continue;
-      }
-
-      urls.push(getStoragePublicUrl(`${folder}/${file.name}`));
-    }
-
-    if (urls.length) {
-      break;
-    }
-  }
-
-  return urls;
-}
-
 async function getDayPhotos(day) {
   const photos = [];
   const seen = new Set();
@@ -89,9 +57,6 @@ async function getDayPhotos(day) {
   if (Array.isArray(day.photoPaths) && day.photoPaths.length) {
     const extraUrls = await Promise.all(day.photoPaths.map((path) => resolveMediaUrl(path)));
     extraUrls.forEach(addPhoto);
-  } else if (!day.enriched) {
-    const listed = await listStoragePhotos(day.dayNumber);
-    listed.forEach(addPhoto);
   }
 
   if (!photos.length) {
@@ -103,9 +68,8 @@ async function getDayPhotos(day) {
 
 function lightEnrichDay(day) {
   const imageUrl = day.imagePath ? getStoragePublicUrl(day.imagePath) : PLACEHOLDER_IMAGE;
-  const withGift = applyGiftScheduleToDay(day);
   return {
-    ...withGift,
+    ...day,
     imageUrl,
     audioUrl: null,
     photos: [imageUrl],
@@ -118,9 +82,8 @@ async function enrichDay(day) {
   const audioUrl = day.audioPath ? await resolveMediaUrl(day.audioPath) : null;
   const photos = await getDayPhotos(day);
 
-  const withGift = applyGiftScheduleToDay(day);
   return {
-    ...withGift,
+    ...day,
     imageUrl,
     audioUrl,
     photos,

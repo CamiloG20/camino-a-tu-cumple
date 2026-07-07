@@ -4,6 +4,22 @@ import multer from 'multer';
 import { loadEnv, sanitizeStorageKey } from './lib/env.mjs';
 import { getAdminSupabase, getStorageBucket } from './lib/supabaseAdmin.mjs';
 import { downloadAudioMp3 } from './lib/ytdlp.mjs';
+import { isAllowedUpload } from '../lib/storageSanitize.js';
+
+const authAttempts = new Map();
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const entry = authAttempts.get(ip);
+  if (!entry || now - entry.start > windowMs) {
+    authAttempts.set(ip, { start: now, count: 1 });
+    return true;
+  }
+  if (entry.count >= 5) return false;
+  entry.count += 1;
+  return true;
+}
 
 const env = loadEnv();
 const PORT = Number(env.ADMIN_SERVER_PORT || 8787);
@@ -32,6 +48,11 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.post('/api/auth/verify', (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+  if (!checkRateLimit(ip)) {
+    return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos.' });
+  }
+
   const { password } = req.body ?? {};
   if (!ADMIN_PASSWORD) {
     return res.status(500).json({ error: 'ADMIN_PASSWORD no configurado' });
@@ -61,6 +82,14 @@ app.put('/api/days/:dayNumber', requireAdmin, async (req, res) => {
   try {
     const dayNumber = Number(req.params.dayNumber);
     const body = req.body ?? {};
+
+    if (body.has_gift && body.gift_number != null) {
+      const giftNum = Number(body.gift_number);
+      if (Number.isNaN(giftNum) || giftNum < 1 || giftNum > 12) {
+        return res.status(400).json({ error: 'Número de regalo inválido (1-12)' });
+      }
+    }
+
     const supabase = getAdminSupabase();
 
     const row = {
@@ -94,6 +123,11 @@ app.post('/api/days/:dayNumber/upload', requireAdmin, upload.single('file'), asy
 
     const dayNumber = Number(req.params.dayNumber);
     const type = req.body?.type === 'extra' ? 'extra' : req.body?.type === 'audio' ? 'audio' : 'main';
+
+    if (!isAllowedUpload(type, req.file.mimetype, req.file.originalname)) {
+      return res.status(400).json({ error: 'Tipo de archivo no permitido' });
+    }
+
     const bucket = getStorageBucket();
     const supabase = getAdminSupabase();
 
@@ -195,6 +229,50 @@ app.post('/api/days/:dayNumber/download-audio', requireAdmin, async (req, res) =
     if (error) throw error;
 
     res.json({ day: data, storagePath });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/days/:dayNumber/delete-media', requireAdmin, async (req, res) => {
+  try {
+    const dayNumber = Number(req.params.dayNumber);
+    const paths = Array.isArray(req.body?.paths) ? req.body.paths : [];
+    if (!paths.length) {
+      return res.status(400).json({ error: 'Se requiere al menos una ruta' });
+    }
+
+    const bucket = getStorageBucket();
+    const supabase = getAdminSupabase();
+    const keys = paths
+      .filter((path) => path && typeof path === 'string' && !path.startsWith('http'))
+      .map((path) => sanitizeStorageKey(path.replace(/^\/+/, '')));
+
+    if (keys.length) {
+      const { error: removeError } = await supabase.storage.from(bucket).remove(keys);
+      if (removeError) throw removeError;
+    }
+
+    const { data: existing } = await supabase
+      .from('days')
+      .select('*')
+      .eq('day_number', dayNumber)
+      .maybeSingle();
+
+    if (existing) {
+      const patch = {
+        day_number: dayNumber,
+        text: existing.text ?? '',
+        has_gift: existing.has_gift ?? false,
+        gift_number: existing.gift_number ?? null,
+        image_path: paths.includes(existing.image_path) ? null : existing.image_path,
+        audio_path: paths.includes(existing.audio_path) ? null : existing.audio_path,
+        photo_paths: (existing.photo_paths || []).filter((path) => !paths.includes(path)),
+      };
+      await supabase.from('days').upsert(patch, { onConflict: 'day_number' });
+    }
+
+    res.json({ ok: true, deleted: paths.length });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

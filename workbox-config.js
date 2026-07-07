@@ -2,6 +2,8 @@ module.exports = {
   globDirectory: 'dist/',
   globPatterns: ['**/*.{js,html,ico,png,json,css,ttf,woff,woff2}'],
   swDest: 'dist/sw.js',
+  skipWaiting: true,
+  clientsClaim: true,
   maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
   navigateFallback: '/index.html',
   navigateFallbackDenylist: [/^\/api\//],

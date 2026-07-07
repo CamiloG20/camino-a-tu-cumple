@@ -1,7 +1,7 @@
 import { requireAdmin, setCors, handleOptions } from '../../_lib/admin.js';
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCors(res, req);
   if (handleOptions(req, res)) return;
 
   if (req.method !== 'POST') {

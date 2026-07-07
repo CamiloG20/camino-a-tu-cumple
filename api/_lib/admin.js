@@ -1,9 +1,65 @@
 import { createClient } from '@supabase/supabase-js';
+import { sanitizeStorageKey } from '../../lib/storageSanitize.js';
+import { isVercelHostname, PRODUCTION_URL } from '../../lib/site.js';
+
+export { sanitizeStorageKey };
 
 let client;
 
 export function getAdminPassword() {
   return process.env.ADMIN_PASSWORD?.trim() || '';
+}
+
+export function getAllowedOrigin() {
+  const explicit = process.env.ADMIN_ALLOWED_ORIGIN?.trim();
+  if (explicit) return explicit;
+
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (production) return `https://${production}`;
+
+  const deployment = process.env.VERCEL_URL?.trim();
+  if (deployment) return `https://${deployment}`;
+
+  return PRODUCTION_URL;
+}
+
+function isAllowedRequestOrigin(origin, req) {
+  if (!origin) return false;
+
+  const allowed = getAllowedOrigin();
+  if (allowed && origin === allowed) return true;
+
+  try {
+    const { hostname } = new URL(origin);
+    const requestHost = (req?.headers?.['x-forwarded-host'] || req?.headers?.host || '')
+      .split(',')[0]
+      .trim()
+      .split(':')[0];
+
+    if (requestHost && hostname === requestHost) return true;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+    if (isVercelHostname(hostname)) return true;
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
+export function setCors(res, req) {
+  const origin = req?.headers?.origin;
+
+  if (origin && isAllowedRequestOrigin(origin, req)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', getAllowedOrigin() || '*');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', getAllowedOrigin() || 'null');
+  }
+
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-password');
 }
 
 export function getStorageBucket() {
@@ -24,21 +80,6 @@ export function getAdminSupabase() {
   return client;
 }
 
-export function sanitizeStorageKey(path) {
-  return path
-    .split('/')
-    .map((part) =>
-      part
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9.\-_ ]/g, '_')
-        .replace(/\s+/g, ' ')
-        .replace(/_+/g, '_')
-        .trim()
-    )
-    .join('/');
-}
-
 export function requireAdmin(req, res) {
   const password = getAdminPassword();
   if (!password) {
@@ -52,15 +93,22 @@ export function requireAdmin(req, res) {
   return true;
 }
 
-export function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-password');
+export async function deleteStoragePaths(paths) {
+  const bucket = getStorageBucket();
+  const supabase = getAdminSupabase();
+  const keys = paths
+    .filter((path) => path && typeof path === 'string' && !path.startsWith('http'))
+    .map((path) => sanitizeStorageKey(path.replace(/^\/+/, '')));
+
+  if (!keys.length) return;
+
+  const { error } = await supabase.storage.from(bucket).remove(keys);
+  if (error) throw error;
 }
 
 export function handleOptions(req, res) {
   if (req.method === 'OPTIONS') {
-    setCors(res);
+    setCors(res, req);
     res.status(204).end();
     return true;
   }

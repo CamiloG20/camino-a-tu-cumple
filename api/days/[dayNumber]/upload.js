@@ -1,4 +1,5 @@
 import formidable from 'formidable';
+import { isAllowedUpload } from '../../../lib/storageSanitize.js';
 import {
   getAdminSupabase,
   getStorageBucket,
@@ -6,7 +7,7 @@ import {
   sanitizeStorageKey,
   setCors,
   handleOptions,
-} from '../_lib/admin.js';
+} from '../../_lib/admin.js';
 
 export const config = {
   api: { bodyParser: false },
@@ -23,7 +24,7 @@ function parseForm(req) {
 }
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCors(res, req);
   if (handleOptions(req, res)) return;
 
   if (req.method !== 'POST') {
@@ -51,6 +52,10 @@ export default async function handler(req, res) {
     const bucket = getStorageBucket();
     const supabase = getAdminSupabase();
     const originalName = file.originalFilename || 'upload.bin';
+
+    if (!isAllowedUpload(type, file.mimetype, originalName)) {
+      return res.status(400).json({ error: 'Tipo de archivo no permitido' });
+    }
 
     let storagePath;
     if (type === 'main') {

@@ -4,9 +4,10 @@ import {
   setCors,
   handleOptions,
 } from '../_lib/admin.js';
+import { parseJsonBody } from '../_lib/parseBody.js';
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCors(res, req);
   if (handleOptions(req, res)) return;
 
   if (req.method !== 'PUT') {
@@ -20,7 +21,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body ?? {};
+    const body = parseJsonBody(req);
+    if (body === null) {
+      return res.status(400).json({ error: 'JSON inválido' });
+    }
+
+    if (body.has_gift && body.gift_number != null) {
+      const giftNum = Number(body.gift_number);
+      if (Number.isNaN(giftNum) || giftNum < 1 || giftNum > 12) {
+        return res.status(400).json({ error: 'Número de regalo inválido (1-12)' });
+      }
+    }
+
     const supabase = getAdminSupabase();
 
     const row = {

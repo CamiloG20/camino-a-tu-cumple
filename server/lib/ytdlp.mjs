@@ -3,7 +3,33 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import YTDlpWrap from 'yt-dlp-wrap';
 
+const ALLOWED_HOSTS = [
+  'youtube.com',
+  'www.youtube.com',
+  'youtu.be',
+  'm.youtube.com',
+  'music.youtube.com',
+];
+
+function assertAllowedUrl(sourceUrl) {
+  let parsed;
+  try {
+    parsed = new URL(sourceUrl);
+  } catch {
+    throw new Error('URL inválida');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Solo se permiten URLs http/https');
+  }
+  const host = parsed.hostname.toLowerCase();
+  const allowed = ALLOWED_HOSTS.some((item) => host === item || host.endsWith(`.${item}`));
+  if (!allowed) {
+    throw new Error('Dominio no permitido. Usa enlaces de YouTube.');
+  }
+}
+
 export async function downloadAudioMp3(sourceUrl, baseName) {
+  assertAllowedUrl(sourceUrl);
   const tmpDir = await mkdtemp(join(tmpdir(), 'ytdlp-'));
   const safeName = baseName.replace(/[^a-zA-Z0-9.\-_ ]/g, '_').trim();
   const outputTemplate = join(tmpDir, `${safeName}.%(ext)s`);

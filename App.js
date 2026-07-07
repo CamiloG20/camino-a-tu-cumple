@@ -9,48 +9,39 @@ import {
   Pressable,
   ActivityIndicator,
   FlatList,
-  Modal,
   Platform,
   useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio } from 'expo-av';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { DataService } from './services/dataService';
 import { isSupabaseConfigured } from './lib/config';
+import { getDaysUntilBirthday, getTodayDayIndex } from './lib/calendar';
 import { GRADIENT_COLORS, getContentWidth, safeArea } from './lib/layout';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
+import { useAudioPlayer } from './hooks/useAudioPlayer';
 import ProgressiveImage from './components/ProgressiveImage';
 import InstallPwaBanner from './components/InstallPwaBanner';
 import OfflineScreen from './components/OfflineScreen';
+import AudioSeekBar from './components/AudioSeekBar';
+import GiftModal from './components/GiftModal';
+import FallbackBanner from './components/FallbackBanner';
 import { getGiftMessage } from './lib/giftSchedule';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
 const VIEWED_KEY = 'viewedImages';
 const OPENED_GIFTS_KEY = 'openedGifts';
 
-const BIRTHDAY_MONTH = 7;
-const BIRTHDAY_DAY = 9;
-
-function getDaysUntilBirthday(date = new Date()) {
-  const today = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  let birthday = new Date(date.getFullYear(), BIRTHDAY_MONTH, BIRTHDAY_DAY);
-
-  if (today > birthday) {
-    birthday = new Date(date.getFullYear() + 1, BIRTHDAY_MONTH, BIRTHDAY_DAY);
+function parseStorageJson(value, fallback = {}) {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
   }
-
-  return Math.round((birthday - today) / (1000 * 60 * 60 * 24));
-}
-
-function getTodayDayIndex(daysCount, daysUntilBirthday) {
-  let index = (daysCount - 1) - daysUntilBirthday;
-  if (index < 0) index = 0;
-  if (index >= daysCount) index = daysCount - 1;
-  return index;
 }
 
 export default function App() {
@@ -61,11 +52,10 @@ export default function App() {
 
   const [todayIndex, setTodayIndex] = useState(0);
   const [viewed, setViewed] = useState({});
-  const [soundObj, setSoundObj] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [enrichingDay, setEnrichingDay] = useState(false);
+  const [enrichError, setEnrichError] = useState('');
   const [currentDay, setCurrentDay] = useState(null);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showGiftModal, setShowGiftModal] = useState(false);
@@ -73,24 +63,25 @@ export default function App() {
   const [diff, setDiff] = useState(0);
   const [realTodayIndex, setRealTodayIndex] = useState(0);
   const [loadError, setLoadError] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [openedGifts, setOpenedGifts] = useState({});
   const [giftMessage, setGiftMessage] = useState('');
   const flatListRef = useRef(null);
   const galleryRef = useRef(null);
 
-  const cleanupAudio = async () => {
-    if (soundObj) {
-      try {
-        await soundObj.stopAsync();
-        await soundObj.unloadAsync();
-        setSoundObj(null);
-        setIsPlaying(false);
-      } catch (error) {
-        console.warn('Error al limpiar audio:', error);
-      }
-    }
-  };
+  const {
+    hasValidAudio,
+    isPlaying,
+    audioPosition,
+    audioDuration,
+    audioLoading,
+    togglePlayback,
+    handleSeekStart,
+    handleSeekComplete,
+    setAudioPosition,
+    formatAudioTime,
+  } = useAudioPlayer(currentDay?.audioUrl);
 
   const markGiftOpened = useCallback(async (dayNumber) => {
     const key = String(dayNumber);
@@ -112,6 +103,7 @@ export default function App() {
     },
     [markGiftOpened]
   );
+
   const markDayViewed = useCallback(async (dayNumber) => {
     const key = String(dayNumber);
     setViewed((prev) => {
@@ -122,43 +114,46 @@ export default function App() {
     });
   }, []);
 
-  const applyDayAtIndex = useCallback(async (daysList, index) => {
-    let day = daysList[index];
-    if (!day?.enriched) {
-      setEnrichingDay(true);
-      try {
-        day = await DataService.enrichDayFull(day);
-        setDays((prev) => prev.map((item, i) => (i === index ? day : item)));
-      } finally {
-        setEnrichingDay(false);
+  const applyDayAtIndex = useCallback(
+    async (daysList, index) => {
+      let day = daysList[index];
+      if (!day?.enriched) {
+        setEnrichingDay(true);
+        setEnrichError('');
+        try {
+          day = await DataService.enrichDayFull(day);
+          setDays((prev) => prev.map((item, i) => (i === index ? day : item)));
+        } catch (error) {
+          setEnrichError(error.message || 'No se pudo cargar el contenido del día');
+          Alert.alert('Error', 'No se pudo cargar el contenido completo de este día.');
+        } finally {
+          setEnrichingDay(false);
+        }
       }
-    }
-    setTodayIndex(index);
-    setCurrentDay(day);
-    setCurrentPhotoIndex(0);
-    markDayViewed(day.dayNumber);
-    return day;
-  }, [markDayViewed]);
+      setTodayIndex(index);
+      setCurrentDay(day);
+      setCurrentPhotoIndex(0);
+      markDayViewed(day.dayNumber);
+      return day;
+    },
+    [markDayViewed]
+  );
 
   useEffect(() => {
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-    }).catch(() => {});
-
     let cancelled = false;
 
     const loadData = async () => {
       try {
         setLoading(true);
         setLoadError(false);
+        setUsingFallback(false);
 
         if (Platform.OS === 'web' && typeof navigator !== 'undefined' && !navigator.onLine) {
           throw new Error('Sin conexión');
         }
 
         let daysData;
+        let fallback = false;
 
         try {
           if (!isSupabaseConfigured()) {
@@ -168,6 +163,7 @@ export default function App() {
         } catch (dataError) {
           console.warn('⚠️ Error con Supabase, usando datos de fallback:', dataError);
           daysData = await DataService.getFallbackData();
+          fallback = true;
         }
 
         if (cancelled) return;
@@ -177,11 +173,9 @@ export default function App() {
 
         const viewedData = await AsyncStorage.getItem(VIEWED_KEY);
         const openedData = await AsyncStorage.getItem(OPENED_GIFTS_KEY);
-        if (viewedData && !cancelled) {
-          setViewed(JSON.parse(viewedData));
-        }
-        if (openedData && !cancelled) {
-          setOpenedGifts(JSON.parse(openedData));
+        if (!cancelled) {
+          setViewed(parseStorageJson(viewedData));
+          setOpenedGifts(parseStorageJson(openedData));
         }
 
         setDays(daysData);
@@ -189,6 +183,7 @@ export default function App() {
         setRealTodayIndex(index);
         setTodayIndex(index);
         setCurrentDay(daysData[index]);
+        setUsingFallback(fallback);
 
         if (!cancelled) {
           await applyDayAtIndex(daysData, index);
@@ -209,16 +204,8 @@ export default function App() {
 
     return () => {
       cancelled = true;
-      cleanupAudio();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadToken]);
-
-  useEffect(() => {
-    if (currentDay) {
-      cleanupAudio();
-    }
-  }, [currentDay?.dayNumber]);
+  }, [reloadToken, applyDayAtIndex]);
 
   useEffect(() => {
     if (loading || !currentDay?.hasGift || todayIndex !== realTodayIndex) return;
@@ -245,97 +232,6 @@ export default function App() {
     shadowRadius: 15,
     transform: [{ scale: withSpring(1) }],
   }));
-
-  async function togglePlayback() {
-    const hasValidAudio =
-      currentDay?.audioUrl &&
-      typeof currentDay.audioUrl === 'string' &&
-      currentDay.audioUrl.startsWith('http');
-
-    if (!hasValidAudio) {
-      Alert.alert('Sin audio', 'No hay audio disponible para este día.');
-      return;
-    }
-
-    try {
-      await handleAudioPlayback();
-    } catch (error) {
-      await handleAudioError(error);
-    }
-  }
-
-  async function handleAudioPlayback() {
-    if (!soundObj) {
-      await createAndPlayNewSound();
-      return;
-    }
-    await handleExistingSound();
-  }
-
-  async function createAndPlayNewSound() {
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: currentDay.audioUrl },
-      { shouldPlay: false }
-    );
-
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (!status.isLoaded) return;
-
-      if (!status.isPlaying && status.didJustFinish) {
-        setIsPlaying(false);
-        setSoundObj(null);
-        return;
-      }
-
-      if (status.isPlaying !== isPlaying) {
-        setIsPlaying(status.isPlaying);
-      }
-    });
-
-    setSoundObj(sound);
-    await sound.playAsync();
-    setIsPlaying(true);
-  }
-
-  async function handleExistingSound() {
-    const status = await soundObj.getStatusAsync();
-    if (!status.isLoaded) {
-      await recreateSound();
-      return;
-    }
-    await toggleExistingSound(status);
-  }
-
-  async function recreateSound() {
-    await soundObj.unloadAsync();
-    setSoundObj(null);
-    setIsPlaying(false);
-    setTimeout(() => togglePlayback(), 100);
-  }
-
-  async function toggleExistingSound(status) {
-    if (status.isPlaying) {
-      await soundObj.pauseAsync();
-      setIsPlaying(false);
-      return;
-    }
-    await soundObj.playAsync();
-    setIsPlaying(true);
-  }
-
-  async function handleAudioError(error) {
-    console.error('Error con el audio:', error);
-    if (soundObj) {
-      try {
-        await soundObj.unloadAsync();
-      } catch (unloadError) {
-        console.warn('Error al descargar audio:', unloadError);
-      }
-    }
-    setSoundObj(null);
-    setIsPlaying(false);
-    Alert.alert('Error', 'No se pudo reproducir el audio.');
-  }
 
   function handleGiftPress() {
     if (currentDay?.hasGift) {
@@ -378,22 +274,27 @@ export default function App() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  const daysLeft = currentDay ? currentDay.dayNumber : diff;
-  const isBirthdayDay = currentDay?.dayNumber === 0;
+  const viewingPastDay = todayIndex !== realTodayIndex;
+  const isBirthdayDay = diff === 0 && !viewingPastDay;
+  const headerText = isBirthdayDay
+    ? '¡Feliz cumpleaños! 🎂❤️'
+    : viewingPastDay && currentDay
+      ? `Viendo el día ${currentDay.dayNumber}`
+      : `Faltan ${diff} días 🎂❤️`;
 
   const mainContent = (
     <>
       <InstallPwaBanner />
+      {usingFallback ? <FallbackBanner /> : null}
 
       <Text style={styles.daysLeftText} accessibilityRole="header">
-        {isBirthdayDay ? '¡Feliz cumpleaños! 🎂❤️' : `Faltan ${daysLeft} días 🎂❤️`}
+        {headerText}
       </Text>
 
       {currentDay && (
         <>
-          {currentDay.text ? (
-            <Text style={styles.dayText}>{currentDay.text}</Text>
-          ) : null}
+          {currentDay.text ? <Text style={styles.dayText}>{currentDay.text}</Text> : null}
+          {enrichError ? <Text style={styles.enrichErrorText}>{enrichError}</Text> : null}
 
           <Animated.View
             key={`day-${currentDay.dayNumber}`}
@@ -420,6 +321,7 @@ export default function App() {
                   onViewableItemsChanged={onViewableItemsChanged}
                   viewabilityConfig={viewabilityConfig}
                   style={styles.carousel}
+                  accessibilityLabel={`Carrusel de fotos del día ${currentDay.dayNumber}, foto ${currentPhotoIndex + 1} de ${currentDay.photos.length}`}
                   getItemLayout={(_, index) => ({
                     length: screenWidth * 0.88,
                     offset: screenWidth * 0.88 * index,
@@ -428,9 +330,9 @@ export default function App() {
                   initialNumToRender={1}
                   maxToRenderPerBatch={2}
                   windowSize={3}
-                  removeClippedSubviews
+                  removeClippedSubviews={Platform.OS !== 'web'}
                 />
-                <View style={styles.paginationContainer}>
+                <View style={styles.paginationContainer} accessibilityElementsHidden>
                   {currentDay.photos.map((_, index) => (
                     <View
                       key={index}
@@ -463,18 +365,43 @@ export default function App() {
           <Animated.View style={[styles.button, audioButtonStyle]}>
             <Pressable
               onPress={togglePlayback}
+              disabled={audioLoading}
               android_ripple={{ color: '#fff' }}
               style={styles.pressable}
               accessibilityRole="button"
               accessibilityLabel={isPlaying ? 'Pausar canción' : 'Reproducir canción del día'}
+              accessibilityState={{ disabled: audioLoading }}
             >
-              <MaterialIcons
-                name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
-                size={48}
-                color="#fff"
-              />
+              {audioLoading ? (
+                <ActivityIndicator color="#fff" size="large" />
+              ) : (
+                <MaterialIcons
+                  name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
+                  size={48}
+                  color="#fff"
+                />
+              )}
             </Pressable>
           </Animated.View>
+
+          {hasValidAudio ? (
+            <View style={styles.audioControls}>
+              <View style={styles.audioTimeRow}>
+                <Text style={styles.audioTime}>{formatAudioTime(audioPosition)}</Text>
+                <Text style={styles.audioTime}>{formatAudioTime(audioDuration)}</Text>
+              </View>
+              <AudioSeekBar
+                position={audioPosition}
+                duration={audioDuration}
+                currentTimeLabel={formatAudioTime(audioPosition)}
+                durationLabel={formatAudioTime(audioDuration)}
+                onSeekStart={handleSeekStart}
+                onSeek={setAudioPosition}
+                onSeekComplete={handleSeekComplete}
+                disabled={!hasValidAudio || audioLoading}
+              />
+            </View>
+          ) : null}
         </>
       )}
 
@@ -486,6 +413,7 @@ export default function App() {
         showsHorizontalScrollIndicator={false}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        nestedScrollEnabled
       >
         {days.map((day, i) => {
           const isActive = i === todayIndex;
@@ -561,44 +489,12 @@ export default function App() {
         </Animated.View>
       ) : null}
 
-      <Modal
+      <GiftModal
         visible={showGiftModal}
-        transparent
-        animationType="fade"
-        onRequestClose={closeGiftModal}
-      >
-        <Pressable style={styles.modalOverlay} onPress={closeGiftModal}>
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>🎁 ¡Tienes un regalo!</Text>
-              <TouchableOpacity
-                onPress={closeGiftModal}
-                style={styles.closeButton}
-                accessibilityLabel="Cerrar modal de regalo"
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <MaterialIcons name="close" size={28} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.giftNumberContainer}>
-              <Text style={styles.giftNumberLabel}>Regalo especial #{giftNumber}</Text>
-              <Text style={styles.giftNumber}>{giftNumber}</Text>
-              {giftMessage ? (
-                <Text style={styles.giftMessageText}>{giftMessage}</Text>
-              ) : null}
-            </View>
-
-            <TouchableOpacity
-              onPress={closeGiftModal}
-              style={styles.modalButton}
-              accessibilityLabel="Cerrar"
-            >
-              <Text style={styles.modalButtonText}>Cerrar</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        giftNumber={giftNumber}
+        giftMessage={giftMessage}
+        onClose={closeGiftModal}
+      />
     </>
   );
 
@@ -642,6 +538,7 @@ export default function App() {
         contentContainerStyle={styles.scrollOuter}
         showsVerticalScrollIndicator={false}
         bounces={false}
+        nestedScrollEnabled
       >
         <View style={styles.webInner}>{mainContent}</View>
       </ScrollView>
@@ -691,6 +588,13 @@ function createStyles(screenWidth) {
       fontFamily: Platform.OS === 'ios' ? 'Georgia' : undefined,
       letterSpacing: 0.3,
       fontStyle: 'italic',
+      maxWidth: imageSize,
+    },
+    enrichErrorText: {
+      color: '#fecaca',
+      fontSize: 13,
+      textAlign: 'center',
+      marginBottom: 8,
       maxWidth: imageSize,
     },
     daysLeftText: {
@@ -827,6 +731,24 @@ function createStyles(screenWidth) {
       minHeight: 48,
       minWidth: 48,
     },
+    audioControls: {
+      width: '100%',
+      maxWidth: imageSize,
+      marginTop: -8,
+      marginBottom: 20,
+      paddingHorizontal: 4,
+    },
+    audioTimeRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 2,
+    },
+    audioTime: {
+      color: '#e2e8f0',
+      fontSize: 12,
+      fontWeight: '600',
+      fontVariant: ['tabular-nums'],
+    },
     giftPressable: {
       width: '100%',
       height: '100%',
@@ -927,83 +849,6 @@ function createStyles(screenWidth) {
       backgroundColor: 'rgba(255,255,255,0.55)',
       justifyContent: 'center',
       alignItems: 'center',
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.7)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 20,
-    },
-    modalContent: {
-      backgroundColor: '#fff',
-      borderRadius: 22,
-      padding: 28,
-      width: '100%',
-      maxWidth: 380,
-      alignItems: 'center',
-      shadowColor: '#000',
-      shadowOpacity: 0.25,
-      shadowRadius: 20,
-      shadowOffset: { width: 0, height: 10 },
-      elevation: 10,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      width: '100%',
-      marginBottom: 16,
-    },
-    modalTitle: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      color: '#333',
-      flex: 1,
-      textAlign: 'center',
-    },
-    closeButton: {
-      padding: 8,
-      minWidth: 44,
-      minHeight: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    giftNumberContainer: {
-      alignItems: 'center',
-      marginVertical: 16,
-    },
-    giftNumberLabel: {
-      fontSize: 18,
-      color: '#666',
-      marginBottom: 8,
-    },
-    giftNumber: {
-      fontSize: 48,
-      fontWeight: 'bold',
-      color: '#ff6b6b',
-    },
-    giftMessageText: {
-      marginTop: 16,
-      fontSize: 15,
-      lineHeight: 22,
-      color: '#475569',
-      textAlign: 'center',
-      paddingHorizontal: 8,
-    },
-    modalButton: {
-      backgroundColor: '#ff6b6b',
-      paddingHorizontal: 32,
-      paddingVertical: 14,
-      borderRadius: 28,
-      marginTop: 12,
-      minHeight: 48,
-      justifyContent: 'center',
-    },
-    modalButtonText: {
-      color: '#fff',
-      fontSize: 17,
-      fontWeight: 'bold',
     },
     webRoot: {
       alignItems: 'center',

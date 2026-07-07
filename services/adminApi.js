@@ -81,4 +81,12 @@ export const AdminApi = {
       body: JSON.stringify({ url }),
     });
   },
+
+  deleteMedia(dayNumber, paths) {
+    return adminFetch(`/api/days/${dayNumber}/delete-media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths }),
+    });
+  },
 };
