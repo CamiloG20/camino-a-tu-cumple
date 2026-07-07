@@ -115,22 +115,28 @@ export default function AdminScreen() {
   const [musicUrl, setMusicUrl] = useState('');
   const [busyAction, setBusyAction] = useState('');
 
-  const loadDays = useCallback(async () => {
+  const loadDays = useCallback(async (isActive = () => true) => {
     setLoading(true);
     try {
       const data = await AdminApi.getDays();
+      if (!isActive()) return;
+
       setDays(data);
       if (!selectedDay && data.length) {
         setSelectedDay(data[0].day_number);
       }
     } catch (error) {
+      if (!isActive()) return;
+
       Alert.alert('Error', error.message);
       if (error.message.includes('Contraseña')) {
         clearStoredAdminPassword();
         setAuthed(false);
       }
     } finally {
-      setLoading(false);
+      if (isActive()) {
+        setLoading(false);
+      }
     }
   }, [selectedDay]);
 
@@ -158,7 +164,16 @@ export default function AdminScreen() {
   }, []);
 
   useEffect(() => {
-    if (authed) loadDays();
+    if (!authed) return undefined;
+
+    let cancelled = false;
+    const isActive = () => !cancelled;
+
+    loadDays(isActive);
+
+    return () => {
+      cancelled = true;
+    };
   }, [authed, loadDays]);
 
   useEffect(() => {

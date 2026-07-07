@@ -115,21 +115,28 @@ export default function App() {
   }, []);
 
   const applyDayAtIndex = useCallback(
-    async (daysList, index) => {
+    async (daysList, index, isActive = () => true) => {
       let day = daysList[index];
       if (!day?.enriched) {
         setEnrichingDay(true);
         setEnrichError('');
         try {
           day = await DataService.enrichDayFull(day);
+          if (!isActive()) return day;
           setDays((prev) => prev.map((item, i) => (i === index ? day : item)));
         } catch (error) {
+          if (!isActive()) return day;
           setEnrichError(error.message || 'No se pudo cargar el contenido del día');
           Alert.alert('Error', 'No se pudo cargar el contenido completo de este día.');
         } finally {
-          setEnrichingDay(false);
+          if (isActive()) {
+            setEnrichingDay(false);
+          }
         }
       }
+
+      if (!isActive()) return day;
+
       setTodayIndex(index);
       setCurrentDay(day);
       setCurrentPhotoIndex(0);
@@ -173,11 +180,10 @@ export default function App() {
 
         const viewedData = await AsyncStorage.getItem(VIEWED_KEY);
         const openedData = await AsyncStorage.getItem(OPENED_GIFTS_KEY);
-        if (!cancelled) {
-          setViewed(parseStorageJson(viewedData));
-          setOpenedGifts(parseStorageJson(openedData));
-        }
+        if (cancelled) return;
 
+        setViewed(parseStorageJson(viewedData));
+        setOpenedGifts(parseStorageJson(openedData));
         setDays(daysData);
         setDiff(calculatedDiff);
         setRealTodayIndex(index);
@@ -185,9 +191,7 @@ export default function App() {
         setCurrentDay(daysData[index]);
         setUsingFallback(fallback);
 
-        if (!cancelled) {
-          await applyDayAtIndex(daysData, index);
-        }
+        await applyDayAtIndex(daysData, index, () => !cancelled);
       } catch (error) {
         console.error('Error cargando datos:', error);
         if (!cancelled) {
