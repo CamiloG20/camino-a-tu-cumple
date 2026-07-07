@@ -5,19 +5,21 @@ module.exports = {
   maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
   runtimeCaching: [
     {
-      urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/.*/i,
+      urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
       handler: 'NetworkFirst',
       options: {
-        cacheName: 'firebase-storage',
-        expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 7 },
+        cacheName: 'supabase-storage',
+        expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 },
+        networkTimeoutSeconds: 10,
       },
     },
     {
-      urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,
+      urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,
       handler: 'NetworkFirst',
       options: {
-        cacheName: 'firestore-api',
-        expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 },
+        cacheName: 'supabase-api',
+        expiration: { maxEntries: 30, maxAgeSeconds: 60 * 30 },
+        networkTimeoutSeconds: 10,
       },
     },
   ],

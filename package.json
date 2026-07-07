@@ -1,5 +1,5 @@
 {
-  "name": "party-countdown",
+  "name": "camino-a-tu-cumple",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -8,7 +8,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "expo export -p web && npx workbox-cli generateSW workbox-config.js",
-    "serve:web": "npx serve dist -s -l 3000"
+    "serve:web": "npx serve dist -s -l 3000",
+    "migrate:firebase": "node scripts/migrate-firebase-to-supabase.mjs",
+    "admin:server": "node server/admin-server.mjs",
+    "dev:admin": "node server/admin-server.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -17,7 +20,11 @@
     "expo-av": "^15.1.7",
     "expo-linear-gradient": "^14.1.5",
     "expo-status-bar": "~2.2.3",
-    "firebase": "^11.10.0",
+    "@supabase/supabase-js": "^2.49.8",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.2",
+    "yt-dlp-wrap": "^2.3.12",
     "react": "19.0.0",
     "react-native": "0.79.5",
     "react-native-reanimated": "~3.17.4",
@@ -29,6 +36,8 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "firebase": "^11.10.0",
+    "pg": "^8.16.0",
     "workbox-cli": "^7.3.0"
   },
   "private": true

@@ -20,7 +20,8 @@ import Animated, { FadeIn, FadeOut, useAnimatedStyle, withSpring } from 'react-n
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
-import { FirebaseService } from './services/firebaseService';
+import { DataService } from './services/dataService';
+import { isSupabaseConfigured } from './lib/config';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
 
@@ -78,12 +79,13 @@ export default function App() {
         let daysData;
 
         try {
-          // Intentar cargar desde Firebase
-          daysData = await FirebaseService.getAllDaysWithUrls();
-        } catch (firebaseError) {
-          console.warn('⚠️ Error con Firebase, usando datos de fallback:', firebaseError);
-          // Usar datos de fallback si Firebase falla
-          daysData = await FirebaseService.getFallbackData();
+          if (!isSupabaseConfigured()) {
+            throw new Error('Supabase no configurado');
+          }
+          daysData = await DataService.getAllDaysWithUrls();
+        } catch (dataError) {
+          console.warn('⚠️ Error con Supabase, usando datos de fallback:', dataError);
+          daysData = await DataService.getFallbackData();
         }
 
         setDays(daysData);
