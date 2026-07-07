@@ -25,9 +25,28 @@ import { isSupabaseConfigured } from './lib/config';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
 
-// Configura tu fecha de cumpleaños
-const BIRTHDAY_MONTH = 7; // Agosto (0-based)
+// Cumpleaños oficial: 9 de agosto (mes 7 en JavaScript, 0 = enero)
+const BIRTHDAY_MONTH = 7;
 const BIRTHDAY_DAY = 9;
+
+function getDaysUntilBirthday(date = new Date()) {
+  const today = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  let birthday = new Date(date.getFullYear(), BIRTHDAY_MONTH, BIRTHDAY_DAY);
+
+  if (today > birthday) {
+    birthday = new Date(date.getFullYear() + 1, BIRTHDAY_MONTH, BIRTHDAY_DAY);
+  }
+
+  return Math.round((birthday - today) / (1000 * 60 * 60 * 24));
+}
+
+function getTodayDayIndex(daysCount, daysUntilBirthday) {
+  // Días ordenados del 31 al 1: si faltan 31 días → índice 0 (día 31)
+  let index = daysCount - daysUntilBirthday;
+  if (index < 0) index = 0;
+  if (index >= daysCount) index = daysCount - 1;
+  return index;
+}
 
 export default function App() {
   const { width: windowWidth } = useWindowDimensions();
@@ -90,24 +109,10 @@ export default function App() {
 
         setDays(daysData);
 
-        // Calcular el día actual
-        const now = new Date();
-        let year = now.getFullYear();
-        const birthday = new Date(year, BIRTHDAY_MONTH, BIRTHDAY_DAY);
-
-        if (now > birthday) {
-          birthday.setFullYear(year + 1);
-          year++;
-        }
-
-        const calculatedDiff = Math.ceil((birthday - now) / (1000 * 60 * 60 * 24));
+        // Calcular el día actual según días restantes hasta el 9 de agosto
+        const calculatedDiff = getDaysUntilBirthday();
         setDiff(calculatedDiff);
-        // Como los días están ordenados de mayor a menor (día 30 en índice 0, día 29 en índice 1, etc.)
-        // Si faltan 30 días, debe mostrar el día 30 (índice 0)
-        // Si faltan 29 días, debe mostrar el día 29 (índice 1)
-        let index = daysData.length - calculatedDiff;
-        if (index < 0) index = 0;
-        if (index >= daysData.length) index = daysData.length - 1;
+        const index = getTodayDayIndex(daysData.length, calculatedDiff);
 
         setTodayIndex(index);
         setRealTodayIndex(index);
