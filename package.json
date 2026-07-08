@@ -7,7 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "expo export -p web && npx workbox-cli generateSW workbox-config.js",
+    "build:web": "npm run generate:icons && expo export -p web && npx workbox-cli generateSW workbox-config.js",
     "serve:web": "npx serve dist -s -l 3000",
     "deploy:vercel": "npm run build:web && npx vercel deploy --prebuilt --prod",
     "deploy:vercel:preview": "npm run build:web && npx vercel deploy --prebuilt",
@@ -21,7 +21,8 @@
     "clean:vercel-env": "node scripts/clean-vercel-env.mjs",
     "fix:day1-photo": "node scripts/fix-day1-photo.mjs",
     "admin:server": "node server/admin-server.mjs",
-    "dev:admin": "node server/admin-server.mjs"
+    "dev:admin": "node server/admin-server.mjs",
+    "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",
@@ -51,6 +52,7 @@
     "pg": "^8.16.0",
     "vercel": "^54.21.0",
     "workbox-cli": "^7.3.0",
+    "sharp": "^0.34.3",
     "yt-dlp-wrap": "^2.3.12"
   },
   "private": true

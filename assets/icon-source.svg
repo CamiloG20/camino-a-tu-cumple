@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Camino a tu cumple">
+  <defs>
+    <linearGradient id="bg" x1="8%" y1="6%" x2="92%" y2="94%">
+      <stop offset="0%" stop-color="#6a11cb"/>
+      <stop offset="55%" stop-color="#5b21b6"/>
+      <stop offset="100%" stop-color="#2575fc"/>
+    </linearGradient>
+    <linearGradient id="heart" x1="50%" y1="18%" x2="50%" y2="92%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ffe4f3"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <circle cx="104" cy="108" r="16" fill="#ffd166"/>
+  <circle cx="408" cy="96" r="12" fill="#ff6bcb"/>
+  <circle cx="420" cy="404" r="14" fill="#ffd166"/>
+  <circle cx="92" cy="392" r="10" fill="#ffffff" opacity="0.9"/>
+  <rect x="368" y="132" width="20" height="20" rx="5" transform="rotate(24 378 142)" fill="#ffffff" opacity="0.85"/>
+  <rect x="124" y="360" width="16" height="16" rx="4" transform="rotate(-18 132 368)" fill="#ff6bcb"/>
+  <path
+    d="M256 404c-88-54-144-104-144-172 0-46 36-82 82-82 30 0 56 16 70 40 14-24 40-40 70-40 46 0 82 36 82 82 0 68-56 118-144 172z"
+    fill="url(#heart)"
+  />
+  <path
+    d="M256 382c-72-42-118-82-118-136 0-36 28-64 64-64 22 0 42 12 54 30 12-18 32-30 54-30 36 0 64 28 64 64 0 54-46 94-118 136z"
+    fill="#ff6bcb"
+    opacity="0.22"
+  />
+  <circle cx="214" cy="196" r="18" fill="#ffffff" opacity="0.35"/>
+</svg>
