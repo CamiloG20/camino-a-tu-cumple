@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { buildTodayPushPayload, sendPushNotification } from '../_lib/webPush.js';
+import { getAppCalendarDate } from '../../lib/timezone.js';
 
 function isAuthorizedCron(req) {
   const secret = process.env.CRON_SECRET?.trim();
@@ -33,7 +34,7 @@ export default async function handler(req, res) {
     const { data: rows, error } = await supabase.from('push_subscriptions').select('*');
     if (error) throw error;
 
-    const payload = buildTodayPushPayload();
+    const payload = buildTodayPushPayload(getAppCalendarDate());
     let sent = 0;
     let removed = 0;
     const failures = [];

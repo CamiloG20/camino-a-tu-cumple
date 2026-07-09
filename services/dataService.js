@@ -3,6 +3,7 @@ import { getSupabase } from '../lib/supabase';
 import { isSupabaseConfigured } from '../lib/config';
 import { resolveStorageUrl } from '../lib/mediaUrl';
 import { TOTAL_EVENT_DAYS } from '../lib/calendar';
+import { getTodayDateKey } from '../lib/timezone';
 
 const DAYS_CACHE_KEY = 'daysCache_v2';
 
@@ -85,7 +86,9 @@ async function enrichDay(day) {
 export class DataService {
   static async getUnlockedDays() {
     const supabase = getSupabase();
-    const { data, error } = await supabase.rpc('get_unlocked_days');
+    const { data, error } = await supabase.rpc('get_unlocked_days', {
+      as_of: getTodayDateKey(),
+    });
 
     if (error) {
       if (error.code === 'PGRST202' || /get_unlocked_days/i.test(error.message || '')) {

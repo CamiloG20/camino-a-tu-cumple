@@ -41,7 +41,7 @@ export default function DailyNotificationBanner({ active = true }) {
         <View style={styles.textWrap}>
           <Text style={styles.title}>Recordatorio diario activo</Text>
           <Text style={styles.body}>
-            Cada mañana a las {DEFAULT_HOUR}:00 te avisamos con “Día desbloqueado”.
+            Cada mañana a las {DEFAULT_HOUR}:00 (hora Ecuador) te avisamos con “Día desbloqueado”.
             {pushReady ? ' Push activo para iPhone/Android.' : ''}
           </Text>
         </View>
@@ -82,7 +82,7 @@ export default function DailyNotificationBanner({ active = true }) {
     <View style={styles.banner}>
       <MaterialIcons name="favorite" size={22} color="#fda4af" />
       <View style={styles.textWrap}>
-        <Text style={styles.title}>Recordatorio diario · {DEFAULT_HOUR}:00</Text>
+        <Text style={styles.title}>Recordatorio diario · {DEFAULT_HOUR}:00 Ecuador</Text>
         <Text style={styles.body}>
           {needsIosInstall
             ? 'En iPhone: primero “Añadir a pantalla de inicio”, luego activa el aviso diario.'
