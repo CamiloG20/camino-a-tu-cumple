@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { AdminApi, clearStoredAdminToken, getStoredAdminToken } from '../services/adminApi';
+import { clearAppConfigCache } from '../lib/appConfigClient';
 import { getAdminApiUrl, isLocalAdminApi } from '../lib/config';
 import { useAdminSignedUrl, useAdminSignedUrls } from '../hooks/useAdminSignedUrl';
 import ProgressiveImage from '../components/ProgressiveImage';
@@ -139,6 +140,8 @@ export default function AdminScreen() {
   });
   const [musicUrl, setMusicUrl] = useState('');
   const [busyAction, setBusyAction] = useState('');
+  const [notificationHourInput, setNotificationHourInput] = useState('10');
+  const [savedNotificationHour, setSavedNotificationHour] = useState(10);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -209,6 +212,30 @@ export default function AdminScreen() {
       cancelled = true;
     };
   }, [authed, loadDays]);
+
+  useEffect(() => {
+    if (!authed) return undefined;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const config = await AdminApi.getAppConfig();
+        if (cancelled) return;
+        const hour = Number(config.notificationHour) || 10;
+        setNotificationHourInput(String(hour));
+        setSavedNotificationHour(hour);
+      } catch (error) {
+        if (!cancelled) {
+          Alert.alert('Aviso', error.message || 'No se pudo cargar la hora del aviso');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authed]);
 
   useEffect(() => {
     const day = days.find((item) => item.day_number === selectedDay);
@@ -298,6 +325,28 @@ export default function AdminScreen() {
         },
       ]
     );
+  }
+
+  async function handleSaveNotificationHour() {
+    const hour = Number(notificationHourInput);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      Alert.alert('Hora inválida', 'Usa un número entre 0 y 23 (hora Ecuador / Quito).');
+      return;
+    }
+
+    try {
+      setBusyAction('notification-hour');
+      const result = await AdminApi.saveAppConfig({ notificationHour: hour });
+      const saved = Number(result.notificationHour) || hour;
+      setSavedNotificationHour(saved);
+      setNotificationHourInput(String(saved));
+      clearAppConfigCache();
+      Alert.alert('Guardado', `El aviso diario quedó a las ${String(saved).padStart(2, '0')}:00 (hora Ecuador).`);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setBusyAction('');
+    }
   }
 
   async function handleLogin() {
@@ -505,6 +554,39 @@ export default function AdminScreen() {
       {loading ? (
         <ActivityIndicator color="#fff" size="large" style={{ marginTop: 40 }} />
       ) : (
+        <>
+          <View style={styles.settingsCard}>
+            <Text style={styles.settingsTitle}>Recordatorio diario</Text>
+            <Text style={styles.settingsHint}>
+              Hora del aviso “Día desbloqueado” en Ecuador (Quito). Actual:{' '}
+              {String(savedNotificationHour).padStart(2, '0')}:00
+            </Text>
+            <View style={styles.settingsRow}>
+              <TextInput
+                value={notificationHourInput}
+                onChangeText={setNotificationHourInput}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="10"
+                placeholderTextColor="#94a3b8"
+                style={styles.hourInput}
+                accessibilityLabel="Hora del aviso diario en Ecuador"
+              />
+              <Text style={styles.hourSuffix}>:00 Ecuador</Text>
+              <TouchableOpacity
+                style={styles.primaryBtnSmall}
+                onPress={handleSaveNotificationHour}
+                disabled={busyAction === 'notification-hour'}
+              >
+                {busyAction === 'notification-hour' ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Guardar hora</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+
         <View style={styles.layout}>
           <ScrollView
             horizontal={!isNarrow}
@@ -748,6 +830,7 @@ export default function AdminScreen() {
             )}
           </ScrollView>
         </View>
+        </>
       )}
     </LinearGradient>
   );
@@ -776,6 +859,43 @@ const createStyles = (isNarrow) =>
     gap: 12,
   },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
+  settingsCard: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    maxWidth: 720,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  settingsTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  settingsHint: { color: '#cbd5e1', fontSize: 13, marginBottom: 12, lineHeight: 18 },
+  settingsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+  hourInput: {
+    width: 64,
+    backgroundColor: '#1e293b',
+    color: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    fontWeight: '700',
+    borderWidth: 1,
+    borderColor: '#334155',
+    textAlign: 'center',
+  },
+  hourSuffix: { color: '#e2e8f0', fontSize: 14, fontWeight: '600' },
+  primaryBtnSmall: {
+    backgroundColor: THEME.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
   title: { color: '#fff', fontSize: 28, fontWeight: '800' },
   subtitle: { color: '#cbd5e1', fontSize: 13, marginTop: 4 },
   layout: {

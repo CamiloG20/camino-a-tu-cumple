@@ -72,6 +72,41 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/app-config', async (_req, res) => {
+  try {
+    const supabase = getAdminSupabase();
+    const { data, error } = await supabase.rpc('get_notification_hour');
+    if (error) throw error;
+    const notificationHour = Number(data);
+    res.json({
+      notificationHour: Number.isInteger(notificationHour) ? notificationHour : 10,
+      timezone: 'America/Guayaquil',
+    });
+  } catch {
+    res.json({ notificationHour: 10, timezone: 'America/Guayaquil' });
+  }
+});
+
+app.put('/api/app-config', requireAdmin, async (req, res) => {
+  try {
+    const hour = Number(req.body?.notificationHour);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      return res.status(400).json({ error: 'Hora inválida (0-23)' });
+    }
+
+    const supabase = getAdminSupabase();
+    const { error } = await supabase
+      .from('app_config')
+      .update({ notification_hour: hour, updated_at: new Date().toISOString() })
+      .eq('id', 1);
+
+    if (error) throw error;
+    res.json({ ok: true, notificationHour: hour, timezone: 'America/Guayaquil' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/auth/verify', (req, res) => {
   const ip = req.ip || req.socket?.remoteAddress || 'unknown';
   if (!checkRateLimit(ip)) {

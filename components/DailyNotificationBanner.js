@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDailyNotifications } from '../hooks/useDailyNotifications';
 import { usePwaInstall } from '../hooks/usePwaInstall';
-import { DEFAULT_HOUR, DISMISS_BANNER_KEY } from '../lib/dailyNotifications';
+import { DISMISS_BANNER_KEY } from '../lib/dailyNotifications';
 import { isPushSupported } from '../lib/webPushClient';
 
 function isIosDevice() {
@@ -11,15 +11,20 @@ function isIosDevice() {
   return /iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
-export default function DailyNotificationBanner({ active = true }) {
+function formatHourLabel(hour) {
+  return `${String(hour).padStart(2, '0')}:00`;
+}
+
+export default function DailyNotificationBanner({ active = true, notificationHour = 10 }) {
   const { supported, permission, prefs, enableDailyNotifications, disableDailyNotifications } =
-    useDailyNotifications({ enabled: active });
+    useDailyNotifications({ enabled: active, notificationHour });
   const { isStandalone } = usePwaInstall();
   const [dismissed, setDismissed] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const needsIosInstall = isIosDevice() && !isStandalone;
   const pushReady = isPushSupported();
+  const hourLabel = formatHourLabel(notificationHour);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return;
@@ -41,7 +46,7 @@ export default function DailyNotificationBanner({ active = true }) {
         <View style={styles.textWrap}>
           <Text style={styles.title}>Recordatorio diario activo</Text>
           <Text style={styles.body}>
-            Cada mañana a las {DEFAULT_HOUR}:00 (hora Ecuador) te avisamos con “Día desbloqueado”.
+            Cada mañana a las {hourLabel} (hora Ecuador) te avisamos con “Día desbloqueado”.
             {pushReady ? ' Push activo para iPhone/Android.' : ''}
           </Text>
         </View>
@@ -82,7 +87,7 @@ export default function DailyNotificationBanner({ active = true }) {
     <View style={styles.banner}>
       <MaterialIcons name="favorite" size={22} color="#fda4af" />
       <View style={styles.textWrap}>
-        <Text style={styles.title}>Recordatorio diario · {DEFAULT_HOUR}:00 Ecuador</Text>
+        <Text style={styles.title}>Recordatorio diario · {hourLabel} Ecuador</Text>
         <Text style={styles.body}>
           {needsIosInstall
             ? 'En iPhone: primero “Añadir a pantalla de inicio”, luego activa el aviso diario.'

@@ -24,6 +24,7 @@ import { getDaysUntilBirthday, getTodayDayIndex, getCalendarDateForDayNumber, fo
 import { GRADIENT_COLORS, BIRTHDAY_GRADIENT_COLORS, getContentWidth, safeArea } from './lib/layout';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
+import { useAppConfig } from './hooks/useAppConfig';
 import ProgressiveImage from './components/ProgressiveImage';
 import InstallPwaBanner from './components/InstallPwaBanner';
 import DailyNotificationBanner from './components/DailyNotificationBanner';
@@ -59,6 +60,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const screenWidth = getContentWidth(windowWidth);
   const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
   const isOnline = useNetworkStatus();
+  const { notificationHour } = useAppConfig();
 
   const [todayIndex, setTodayIndex] = useState(0);
   const [viewed, setViewed] = useState({});
@@ -266,10 +268,10 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   useEffect(() => {
     if (loading || adminPreview || eventNotStarted) return;
-    if (!shouldShowDayWelcome()) return;
+    if (!shouldShowDayWelcome(new Date(), notificationHour)) return;
     setWelcomePayload(getDayWelcomePayload());
     setShowDayWelcome(true);
-  }, [loading, adminPreview, eventNotStarted, todayIndex]);
+  }, [loading, adminPreview, eventNotStarted, todayIndex, notificationHour]);
 
   useEffect(() => {
     if (loading || !currentDay?.hasGift || todayIndex !== realTodayIndex) return;
@@ -379,7 +381,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const mainContent = (
     <>
       <InstallPwaBanner />
-      <DailyNotificationBanner active={!adminPreview} />
+      <DailyNotificationBanner active={!adminPreview} notificationHour={notificationHour} />
       {adminPreview ? (
         <View style={styles.previewBanner}>
           <Text style={styles.previewBannerText}>
@@ -643,7 +645,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
       <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
         <StatusBar style="light" />
         <View style={styles.preStartWrap}>
-          <DailyNotificationBanner active />
+          <DailyNotificationBanner active notificationHour={notificationHour} />
           <EventNotStartedScreen
             daysUntilStart={daysUntilStart}
             startDate={getEventStartDate()}

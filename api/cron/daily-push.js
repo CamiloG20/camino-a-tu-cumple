@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { buildTodayPushPayload, sendPushNotification } from '../_lib/webPush.js';
-import { getAppCalendarDate } from '../../lib/timezone.js';
+import { getAppCalendarDate, getAppHour } from '../../lib/timezone.js';
+import { fetchNotificationHourFromDb } from '../_lib/appConfig.js';
 
 function isAuthorizedCron(req) {
   const secret = process.env.CRON_SECRET?.trim();
@@ -31,6 +32,19 @@ export default async function handler(req, res) {
 
   try {
     const supabase = getSupabase();
+    const notificationHour = await fetchNotificationHourFromDb(supabase);
+    const currentHour = getAppHour();
+
+    if (currentHour !== notificationHour) {
+      return res.status(200).json({
+        ok: true,
+        skipped: true,
+        reason: 'not_notification_hour',
+        notificationHour,
+        currentHour,
+      });
+    }
+
     const { data: rows, error } = await supabase.from('push_subscriptions').select('*');
     if (error) throw error;
 

@@ -13,11 +13,16 @@ import {
   showDailyNotification,
 } from '../lib/dailyNotifications';
 
-export function useDailyNotifications({ enabled: active = true } = {}) {
+export function useDailyNotifications({ enabled: active = true, notificationHour = DEFAULT_HOUR } = {}) {
   const [supported, setSupported] = useState(false);
   const [permission, setPermission] = useState('default');
-  const [prefs, setPrefs] = useState({ enabled: false, hour: DEFAULT_HOUR });
+  const [prefs, setPrefs] = useState({ enabled: false });
   const timerRef = useRef(null);
+  const hourRef = useRef(notificationHour);
+
+  useEffect(() => {
+    hourRef.current = notificationHour;
+  }, [notificationHour]);
 
   const refreshPermission = useCallback(() => {
     if (!isNotificationSupported()) {
@@ -41,7 +46,7 @@ export function useDailyNotifications({ enabled: active = true } = {}) {
     const currentPrefs = loadNotificationPrefs();
     setPrefs(currentPrefs);
 
-    if (!shouldNotifyNow(currentPrefs)) return;
+    if (!shouldNotifyNow(currentPrefs, new Date(), hourRef.current)) return;
 
     const payload = buildDailyNotificationPayload();
     await showDailyNotification(payload);
@@ -58,7 +63,7 @@ export function useDailyNotifications({ enabled: active = true } = {}) {
     const currentPrefs = loadNotificationPrefs();
     if (!currentPrefs.enabled || Notification.permission !== 'granted') return;
 
-    const delay = msUntilNextLocalHour(currentPrefs.hour ?? DEFAULT_HOUR);
+    const delay = msUntilNextLocalHour(hourRef.current);
     timerRef.current = setTimeout(async () => {
       await runDailyCheck();
       scheduleNextCheck();
@@ -83,7 +88,7 @@ export function useDailyNotifications({ enabled: active = true } = {}) {
       document.removeEventListener('visibilitychange', onVisibility);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [active, runDailyCheck, scheduleNextCheck, prefs.enabled, permission]);
+  }, [active, runDailyCheck, scheduleNextCheck, prefs.enabled, permission, notificationHour]);
 
   const enableDailyNotifications = useCallback(async () => {
     const result = await requestNotificationPermission();
@@ -93,7 +98,7 @@ export function useDailyNotifications({ enabled: active = true } = {}) {
       return result;
     }
 
-    const nextPrefs = { enabled: true, hour: DEFAULT_HOUR };
+    const nextPrefs = { enabled: true };
     saveNotificationPrefs(nextPrefs);
     setPrefs(nextPrefs);
 
@@ -109,7 +114,7 @@ export function useDailyNotifications({ enabled: active = true } = {}) {
   }, [refreshPermission, runDailyCheck, scheduleNextCheck]);
 
   const disableDailyNotifications = useCallback(async () => {
-    const nextPrefs = { enabled: false, hour: DEFAULT_HOUR };
+    const nextPrefs = { enabled: false };
     saveNotificationPrefs(nextPrefs);
     setPrefs(nextPrefs);
     try {
@@ -127,6 +132,7 @@ export function useDailyNotifications({ enabled: active = true } = {}) {
     supported,
     permission,
     prefs,
+    notificationHour,
     enableDailyNotifications,
     disableDailyNotifications,
     refreshPermission,

@@ -112,4 +112,16 @@ export const AdminApi = {  verify(password) {
       body: JSON.stringify({ paths }),
     });
   },
+
+  getAppConfig() {
+    return adminFetch('/api/app-config');
+  },
+
+  saveAppConfig(payload) {
+    return adminFetch('/api/app-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
 };
