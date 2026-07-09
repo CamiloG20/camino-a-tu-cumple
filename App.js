@@ -26,6 +26,7 @@ import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import ProgressiveImage from './components/ProgressiveImage';
 import InstallPwaBanner from './components/InstallPwaBanner';
+import DailyNotificationBanner from './components/DailyNotificationBanner';
 import OfflineScreen from './components/OfflineScreen';
 import EventNotStartedScreen from './components/EventNotStartedScreen';
 import AudioSeekBar from './components/AudioSeekBar';
@@ -363,6 +364,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const mainContent = (
     <>
       <InstallPwaBanner />
+      <DailyNotificationBanner active={!adminPreview} />
       {adminPreview ? (
         <View style={styles.previewBanner}>
           <Text style={styles.previewBannerText}>
@@ -610,10 +612,13 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     return (
       <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
         <StatusBar style="light" />
-        <EventNotStartedScreen
-          daysUntilStart={daysUntilStart}
-          startDate={getEventStartDate()}
-        />
+        <View style={styles.preStartWrap}>
+          <DailyNotificationBanner active />
+          <EventNotStartedScreen
+            daysUntilStart={daysUntilStart}
+            startDate={getEventStartDate()}
+          />
+        </View>
       </LinearGradient>
     );
   }
@@ -1015,6 +1020,14 @@ function createStyles(screenWidth) {
     },
     webRoot: {
       alignItems: 'center',
+    },
+    preStartWrap: {
+      flex: 1,
+      width: '100%',
+      maxWidth: 440,
+      alignSelf: 'center',
+      paddingTop: safeArea.paddingTop,
+      paddingHorizontal: safeArea.paddingHorizontal,
     },
     webInner: {
       width: '100%',

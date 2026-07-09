@@ -8,7 +8,7 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/((?!_expo|assets|api|sw.js|workbox|manifest.json|robots.txt|favicon.ico|favicon.png|favicon-48.png|logo180.png|logo192.png|logo512.png|metadata.json).*)",
+      "source": "/((?!_expo|assets|api|sw.js|workbox|notification-sw.js|manifest.json|robots.txt|favicon.ico|favicon.png|favicon-48.png|logo180.png|logo192.png|logo512.png|metadata.json).*)",
       "destination": "/index.html"
     }
   ],
