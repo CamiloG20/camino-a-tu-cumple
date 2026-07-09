@@ -22,6 +22,12 @@ import ProgressiveImage from '../components/ProgressiveImage';
 import AdminDayPreview from '../components/AdminDayPreview';
 import { GRADIENT_COLORS, THEME } from '../lib/layout';
 import { getGiftMessage } from '../lib/giftSchedule';
+import {
+  formatCalendarDate,
+  getBirthdayDate,
+  getEventStartDate,
+  TOTAL_EVENT_DAYS,
+} from '../lib/calendar';
 
 function dayToForm(day) {
   return {
@@ -471,6 +477,9 @@ export default function AdminScreen() {
   const formPhotoUrls = useAdminSignedUrls(form.photo_paths || []);
   const formAudioUrl = useAdminSignedUrl(form.audio_path);
 
+  const eventStartLabel = formatCalendarDate(getEventStartDate());
+  const birthdayLabel = formatCalendarDate(getBirthdayDate());
+
   function handleLogout() {
     clearStoredAdminToken();
     setAuthed(false);
@@ -555,6 +564,18 @@ export default function AdminScreen() {
         <ActivityIndicator color="#fff" size="large" style={{ marginTop: 40 }} />
       ) : (
         <>
+          <View style={styles.settingsCard}>
+            <Text style={styles.settingsTitle}>Calendario del camino</Text>
+            <Text style={styles.settingsHint}>
+              Día 31 → inicio {eventStartLabel} · Día 0 → cumple {birthdayLabel} ·{' '}
+              {TOTAL_EVENT_DAYS} días en total. Las fechas se fijan en el deploy (no desde aquí).
+            </Text>
+            <Text style={styles.settingsList}>
+              Desde admin puedes editar: mensaje, imagen, fotos extra, audio, regalo y hora del aviso
+              diario. yt-dlp solo funciona en local.
+            </Text>
+          </View>
+
           <View style={styles.settingsCard}>
             <Text style={styles.settingsTitle}>Recordatorio diario</Text>
             <Text style={styles.settingsHint}>
@@ -874,7 +895,8 @@ const createStyles = (isNarrow) =>
     width: '100%',
   },
   settingsTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  settingsHint: { color: '#cbd5e1', fontSize: 13, marginBottom: 12, lineHeight: 18 },
+  settingsHint: { color: '#cbd5e1', fontSize: 13, marginBottom: 8, lineHeight: 18 },
+  settingsList: { color: '#94a3b8', fontSize: 12, lineHeight: 17 },
   settingsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
   hourInput: {
     width: 64,

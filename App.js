@@ -14,14 +14,14 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { DataService } from './services/dataService';
 import { AdminApi, isAdminAuthenticated } from './services/adminApi';
 import { isSupabaseConfigured } from './lib/config';
 import { getDaysUntilBirthday, getTodayDayIndex, getCalendarDateForDayNumber, formatCalendarDate, isBeforeEventStart, getDaysUntilEventStart, getEventStartDate } from './lib/calendar';
-import { GRADIENT_COLORS, BIRTHDAY_GRADIENT_COLORS, getContentWidth, safeArea } from './lib/layout';
+import { BACKGROUND_OVERLAY_COLORS, BIRTHDAY_BACKGROUND_OVERLAY_COLORS, getContentWidth, safeArea } from './lib/layout';
+import AppBackground from './components/AppBackground';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useAppConfig } from './hooks/useAppConfig';
@@ -376,7 +376,9 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
       ? `Viendo el día ${currentDay.dayNumber}`
       : `Faltan ${diff} días 🎂❤️`;
 
-  const activeGradient = isBirthdayDay ? BIRTHDAY_GRADIENT_COLORS : GRADIENT_COLORS;
+  const activeBackgroundOverlay = isBirthdayDay
+    ? BIRTHDAY_BACKGROUND_OVERLAY_COLORS
+    : BACKGROUND_OVERLAY_COLORS;
 
   const mainContent = (
     <>
@@ -612,37 +614,37 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   if (!isOnline && loadError && !days.length) {
     return (
-      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container}>
         <StatusBar style="light" />
         <OfflineScreen onRetry={() => setReloadToken((n) => n + 1)} />
-      </LinearGradient>
+      </AppBackground>
     );
   }
 
   if (loading) {
     return (
-      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container}>
         <StatusBar style="light" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#fff" />
           <Text style={styles.loadingText}>Cargando calendario...</Text>
         </View>
-      </LinearGradient>
+      </AppBackground>
     );
   }
 
   if (loadError && !days.length) {
     return (
-      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container}>
         <StatusBar style="light" />
         <OfflineScreen onRetry={() => setReloadToken((n) => n + 1)} />
-      </LinearGradient>
+      </AppBackground>
     );
   }
 
   if (eventNotStarted && !adminPreview) {
     return (
-      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container}>
         <StatusBar style="light" />
         <View style={styles.preStartWrap}>
           <DailyNotificationBanner active notificationHour={notificationHour} />
@@ -651,13 +653,13 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
             startDate={getEventStartDate()}
           />
         </View>
-      </LinearGradient>
+      </AppBackground>
     );
   }
 
   return (
-    <LinearGradient
-      colors={activeGradient}
+    <AppBackground
+      overlayColors={activeBackgroundOverlay}
       style={[styles.container, Platform.OS === 'web' && styles.webRoot]}
     >
       <StatusBar style="light" />
@@ -669,7 +671,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
       >
         <View style={styles.webInner}>{mainContent}</View>
       </ScrollView>
-    </LinearGradient>
+    </AppBackground>
   );
 }
 

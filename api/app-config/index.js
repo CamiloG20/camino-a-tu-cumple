@@ -42,7 +42,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'JSON inválido' });
       }
 
-      const notificationHour = normalizeNotificationHour(body.notificationHour);
+      const notificationHour = normalizeNotificationHour(body.notificationHour, null);
+      if (notificationHour === null) {
+        return res.status(400).json({ error: 'Hora inválida (0-23)' });
+      }
 
       const supabase = getAdminSupabase();
       const saved = await updateNotificationHourInDb(supabase, notificationHour);

@@ -1,11 +1,14 @@
 /**
  * Configuración pública de la app (hora de aviso, etc.).
  */
-import { DEFAULT_HOUR } from '../dailyNotifications.js';
+import { DEFAULT_HOUR } from '../../lib/dailyNotifications.js';
 
 export const APP_TIMEZONE_LABEL = 'America/Guayaquil';
 
 export function normalizeNotificationHour(value, fallback = DEFAULT_HOUR) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
   const hour = Number(value);
   if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
     return fallback;
