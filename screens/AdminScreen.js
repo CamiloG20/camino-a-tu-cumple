@@ -559,7 +559,9 @@ export default function AdminScreen() {
             <Text style={styles.settingsTitle}>Recordatorio diario</Text>
             <Text style={styles.settingsHint}>
               Hora del aviso “Día desbloqueado” en Ecuador (Quito). Actual:{' '}
-              {String(savedNotificationHour).padStart(2, '0')}:00
+              {String(savedNotificationHour).padStart(2, '0')}:00. El push con la app cerrada en
+              iPhone se envía cuando esta hora coincide con el cron del servidor (10:00 en plan
+              gratuito de Vercel); otra hora aplica al aviso local de la PWA instalada.
             </Text>
             <View style={styles.settingsRow}>
               <TextInput
