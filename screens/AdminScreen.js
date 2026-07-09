@@ -37,6 +37,7 @@ function dayToForm(day) {
     gift_message: day.gift_message || '',
     image_path: day.image_path || '',
     audio_path: day.audio_path || '',
+    background_path: day.background_path || '',
     photo_paths: day.photo_paths || [],
   };
 }
@@ -49,6 +50,7 @@ function formToPayload(form) {
     gift_message: form.gift_message?.trim() || null,
     image_path: form.image_path || null,
     audio_path: form.audio_path || null,
+    background_path: form.background_path || null,
     photo_paths: form.photo_paths || [],
   };
 }
@@ -142,12 +144,15 @@ export default function AdminScreen() {
     gift_message: '',
     image_path: '',
     audio_path: '',
+    background_path: '',
     photo_paths: [],
   });
   const [musicUrl, setMusicUrl] = useState('');
   const [busyAction, setBusyAction] = useState('');
   const [notificationHourInput, setNotificationHourInput] = useState('10');
   const [savedNotificationHour, setSavedNotificationHour] = useState(10);
+  const [globalBackgroundPath, setGlobalBackgroundPath] = useState('');
+  const [globalBackgroundPreviewUrl, setGlobalBackgroundPreviewUrl] = useState('');
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -231,6 +236,15 @@ export default function AdminScreen() {
         const hour = Number(config.notificationHour) || 10;
         setNotificationHourInput(String(hour));
         setSavedNotificationHour(hour);
+        setGlobalBackgroundPath(config.backgroundPath || '');
+        if (config.backgroundUrl) {
+          setGlobalBackgroundPreviewUrl(config.backgroundUrl);
+        } else if (config.backgroundPath) {
+          const signed = await AdminApi.signMediaUrl(config.backgroundPath);
+          setGlobalBackgroundPreviewUrl(signed);
+        } else {
+          setGlobalBackgroundPreviewUrl('');
+        }
       } catch (error) {
         if (!cancelled) {
           Alert.alert('Aviso', error.message || 'No se pudo cargar la hora del aviso');
@@ -254,6 +268,7 @@ export default function AdminScreen() {
       gift_message: day.gift_message || '',
       image_path: day.image_path || '',
       audio_path: day.audio_path || '',
+      background_path: day.background_path || '',
       photo_paths: day.photo_paths || [],
     });
     setMusicUrl('');
@@ -331,6 +346,37 @@ export default function AdminScreen() {
         },
       ]
     );
+  }
+
+  async function handleUploadGlobalBackground(file) {
+    if (!file) return;
+    try {
+      setBusyAction('global-background');
+      const result = await AdminApi.uploadGlobalBackground(file);
+      setGlobalBackgroundPath(result.backgroundPath || '');
+      setGlobalBackgroundPreviewUrl(result.backgroundUrl || '');
+      clearAppConfigCache();
+      Alert.alert('Listo', 'Fondo general actualizado');
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  async function handleClearGlobalBackground() {
+    try {
+      setBusyAction('global-background');
+      await AdminApi.deleteGlobalBackground();
+      setGlobalBackgroundPath('');
+      setGlobalBackgroundPreviewUrl('');
+      clearAppConfigCache();
+      Alert.alert('Listo', 'Fondo general eliminado. Se usará el fondo por defecto.');
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setBusyAction('');
+    }
   }
 
   async function handleSaveNotificationHour() {
@@ -416,6 +462,18 @@ export default function AdminScreen() {
     }
   }
 
+  async function clearDayBackground() {
+    const path = form.background_path;
+    if (path) await deletePathsFromStorage([path]);
+    const nextForm = { ...form, background_path: '' };
+    setForm(nextForm);
+    try {
+      await persistForm(nextForm, { silent: true });
+    } catch {
+      // persistForm ya mostró el error
+    }
+  }
+
   async function clearImage() {
     const path = form.image_path;
     if (path) await deletePathsFromStorage([path]);
@@ -476,6 +534,7 @@ export default function AdminScreen() {
   const formImageUrl = useAdminSignedUrl(form.image_path);
   const formPhotoUrls = useAdminSignedUrls(form.photo_paths || []);
   const formAudioUrl = useAdminSignedUrl(form.audio_path);
+  const formBackgroundUrl = useAdminSignedUrl(form.background_path);
 
   const eventStartLabel = formatCalendarDate(getEventStartDate());
   const birthdayLabel = formatCalendarDate(getBirthdayDate());
@@ -571,9 +630,39 @@ export default function AdminScreen() {
               {TOTAL_EVENT_DAYS} días en total. Las fechas se fijan en el deploy (no desde aquí).
             </Text>
             <Text style={styles.settingsList}>
-              Desde admin puedes editar: mensaje, imagen, fotos extra, audio, regalo y hora del aviso
-              diario. yt-dlp solo funciona en local.
+              Desde admin puedes editar: mensaje, imagen, fotos extra, audio, fondo (general o por
+              día), regalo y hora del aviso diario. yt-dlp solo funciona en local.
             </Text>
+          </View>
+
+          <View style={styles.settingsCard}>
+            <Text style={styles.settingsTitle}>Fondo general de la app</Text>
+            <Text style={styles.settingsHint}>
+              Imagen de fondo para todos los días que no tengan uno propio. Si no subes nada, se usa
+              el collage por defecto del proyecto.
+            </Text>
+            {globalBackgroundPreviewUrl ? (
+              <ProgressiveImage
+                source={{ uri: globalBackgroundPreviewUrl }}
+                style={styles.backgroundPreview}
+                accessibilityLabel="Vista previa del fondo general"
+              />
+            ) : null}
+            <View style={styles.actionRow}>
+              <WebFileInput
+                accept="image/*"
+                label={busyAction === 'global-background' ? 'Subiendo…' : 'Subir fondo general'}
+                onSelect={handleUploadGlobalBackground}
+              />
+              {globalBackgroundPath ? (
+                <TouchableOpacity style={styles.dangerBtn} onPress={handleClearGlobalBackground}>
+                  <Text style={styles.dangerBtnText}>Quitar fondo general</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {globalBackgroundPath ? (
+              <Text style={styles.pathText}>{getFileName(globalBackgroundPath)}</Text>
+            ) : null}
           </View>
 
           <View style={styles.settingsCard}>
@@ -718,6 +807,41 @@ export default function AdminScreen() {
                       onPress={clearImage}
                     >
                       <Text style={styles.dangerBtnText}>Quitar imagen</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
+                <Text style={styles.sectionTitle}>Fondo del día (opcional)</Text>
+                <Text style={styles.pathText}>
+                  Si subes un fondo aquí, reemplaza el fondo general solo en este día.
+                </Text>
+                {form.background_path ? (
+                  <ProgressiveImage
+                    source={{ uri: formBackgroundUrl }}
+                    style={styles.backgroundPreview}
+                    accessibilityLabel="Vista previa fondo del día"
+                  />
+                ) : (
+                  <Text style={styles.pathText}>Usa el fondo general</Text>
+                )}
+                <Text style={styles.label}>Ruta de fondo</Text>
+                <TextInput
+                  value={form.background_path}
+                  onChangeText={(background_path) => setForm((prev) => ({ ...prev, background_path }))}
+                  placeholder="backgrounds/day31.jpg"
+                  placeholderTextColor="#999"
+                  style={styles.input}
+                  autoCapitalize="none"
+                />
+                <View style={styles.actionRow}>
+                  <WebFileInput
+                    accept="image/*"
+                    label="Subir fondo del día"
+                    onSelect={(file) => handleUpload('background', file)}
+                  />
+                  {form.background_path ? (
+                    <TouchableOpacity style={styles.dangerBtn} onPress={clearDayBackground}>
+                      <Text style={styles.dangerBtnText}>Usar fondo general</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -961,6 +1085,15 @@ const createStyles = (isNarrow) =>
     aspectRatio: 1,
     borderRadius: 12,
     marginBottom: 8,
+  },
+  backgroundPreview: {
+    width: '100%',
+    maxWidth: 320,
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   photoGrid: {
     flexDirection: 'row',

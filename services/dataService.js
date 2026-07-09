@@ -21,6 +21,7 @@ function mapDayRow(row) {
     giftNumber: row.gift_number ?? row.giftNumber ?? null,
     giftMessage: row.gift_message ?? row.giftMessage ?? null,
     photoPaths: row.photo_paths ?? row.photoPaths ?? [],
+    backgroundPath: row.background_path ?? row.backgroundPath ?? null,
   };
 }
 
@@ -59,10 +60,12 @@ async function lightEnrichDay(day) {
   const imageUrl = day.imagePath
     ? (await resolveStorageUrl(day.imagePath)) ?? PLACEHOLDER_IMAGE
     : PLACEHOLDER_IMAGE;
+  const backgroundUrl = day.backgroundPath ? await resolveStorageUrl(day.backgroundPath) : null;
 
   return {
     ...day,
     imageUrl,
+    backgroundUrl,
     audioUrl: null,
     photos: [imageUrl],
     enriched: false,
@@ -72,11 +75,13 @@ async function lightEnrichDay(day) {
 async function enrichDay(day) {
   const imageUrl = (await resolveStorageUrl(day.imagePath)) ?? PLACEHOLDER_IMAGE;
   const audioUrl = day.audioPath ? await resolveStorageUrl(day.audioPath) : null;
+  const backgroundUrl = day.backgroundPath ? await resolveStorageUrl(day.backgroundPath) : null;
   const photos = await getDayPhotos(day);
 
   return {
     ...day,
     imageUrl,
+    backgroundUrl,
     audioUrl,
     photos,
     enriched: true,

@@ -7,6 +7,10 @@ import { downloadAudioMp3 } from './lib/ytdlp.mjs';
 import { isAllowedUpload } from '../lib/storageSanitize.js';
 import { createAdminToken, verifyAdminToken } from '../lib/adminToken.js';
 import { parseDayNumber } from '../lib/dayValidation.js';
+import {
+  buildPublicAppConfigPayload,
+  updateGlobalBackgroundPath,
+} from '../api/_lib/appConfig.js';
 
 const authAttempts = new Map();
 
@@ -75,15 +79,15 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/app-config', async (_req, res) => {
   try {
     const supabase = getAdminSupabase();
-    const { data, error } = await supabase.rpc('get_notification_hour');
-    if (error) throw error;
-    const notificationHour = Number(data);
-    res.json({
-      notificationHour: Number.isInteger(notificationHour) ? notificationHour : 10,
-      timezone: 'America/Guayaquil',
-    });
+    const payload = await buildPublicAppConfigPayload(supabase);
+    res.json(payload);
   } catch {
-    res.json({ notificationHour: 10, timezone: 'America/Guayaquil' });
+    res.json({
+      notificationHour: 10,
+      timezone: 'America/Guayaquil',
+      backgroundPath: null,
+      backgroundUrl: null,
+    });
   }
 });
 
@@ -101,7 +105,69 @@ app.put('/api/app-config', requireAdmin, async (req, res) => {
       .eq('id', 1);
 
     if (error) throw error;
-    res.json({ ok: true, notificationHour: hour, timezone: 'America/Guayaquil' });
+    const payload = await buildPublicAppConfigPayload(supabase);
+    res.json({
+      ok: true,
+      notificationHour: hour,
+      timezone: payload.timezone,
+      backgroundPath: payload.backgroundPath,
+      backgroundUrl: payload.backgroundUrl,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/app-config/background', requireAdmin, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Archivo requerido' });
+    }
+    if (!isAllowedUpload('background', req.file.mimetype, req.file.originalname)) {
+      return res.status(400).json({ error: 'Tipo de archivo no permitido' });
+    }
+
+    const ext = req.file.originalname.split('.').pop() || 'jpg';
+    const storagePath = sanitizeStorageKey(`backgrounds/global.${ext}`);
+    const bucket = getStorageBucket();
+    const supabase = getAdminSupabase();
+
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, req.file.buffer, {
+      upsert: true,
+      contentType: req.file.mimetype,
+    });
+    if (uploadError) throw uploadError;
+
+    await updateGlobalBackgroundPath(supabase, storagePath);
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(storagePath, 3600);
+    if (error) throw error;
+
+    res.json({
+      ok: true,
+      backgroundPath: storagePath,
+      backgroundUrl: data.signedUrl,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/app-config/background', requireAdmin, async (_req, res) => {
+  try {
+    const supabase = getAdminSupabase();
+    const bucket = getStorageBucket();
+    const { data: config } = await supabase
+      .from('app_config')
+      .select('background_path')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (config?.background_path) {
+      await supabase.storage.from(bucket).remove([sanitizeStorageKey(config.background_path)]);
+    }
+
+    await updateGlobalBackgroundPath(supabase, null);
+    res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -173,15 +239,28 @@ app.put('/api/days/:dayNumber', requireAdmin, async (req, res) => {
 
     const supabase = getAdminSupabase();
 
+    const { data: existing } = await supabase
+      .from('days')
+      .select('*')
+      .eq('day_number', dayNumber)
+      .maybeSingle();
+
     const row = {
       day_number: dayNumber,
-      text: body.text ?? '',
-      image_path: body.image_path ?? null,
-      audio_path: body.audio_path ?? null,
-      has_gift: Boolean(body.has_gift),
-      gift_number: body.gift_number ?? null,
-      gift_message: body.gift_message?.trim() || null,
-      photo_paths: Array.isArray(body.photo_paths) ? body.photo_paths : [],
+      text: body.text ?? existing?.text ?? '',
+      image_path: body.image_path !== undefined ? body.image_path : existing?.image_path ?? null,
+      audio_path: body.audio_path !== undefined ? body.audio_path : existing?.audio_path ?? null,
+      background_path:
+        body.background_path !== undefined ? body.background_path : existing?.background_path ?? null,
+      has_gift: body.has_gift !== undefined ? Boolean(body.has_gift) : Boolean(existing?.has_gift),
+      gift_number: body.gift_number !== undefined ? body.gift_number : existing?.gift_number ?? null,
+      gift_message:
+        body.gift_message !== undefined
+          ? body.gift_message?.trim() || null
+          : existing?.gift_message ?? null,
+      photo_paths: Array.isArray(body.photo_paths)
+        ? body.photo_paths
+        : existing?.photo_paths ?? [],
     };
 
     const { data, error } = await supabase
@@ -207,7 +286,14 @@ app.post('/api/days/:dayNumber/upload', requireAdmin, upload.single('file'), asy
     if (dayNumber == null) {
       return res.status(400).json({ error: 'Día inválido (0-31)' });
     }
-    const type = req.body?.type === 'extra' ? 'extra' : req.body?.type === 'audio' ? 'audio' : 'main';
+    const type =
+      req.body?.type === 'extra'
+        ? 'extra'
+        : req.body?.type === 'audio'
+          ? 'audio'
+          : req.body?.type === 'background'
+            ? 'background'
+            : 'main';
 
     if (!isAllowedUpload(type, req.file.mimetype, req.file.originalname)) {
       return res.status(400).json({ error: 'Tipo de archivo no permitido' });
@@ -223,6 +309,9 @@ app.post('/api/days/:dayNumber/upload', requireAdmin, upload.single('file'), asy
     } else if (type === 'audio') {
       const ext = req.file.originalname.split('.').pop() || 'mp3';
       storagePath = sanitizeStorageKey(`sounds/${dayNumber}.${ext}`);
+    } else if (type === 'background') {
+      const ext = req.file.originalname.split('.').pop() || 'jpg';
+      storagePath = sanitizeStorageKey(`backgrounds/day${dayNumber}.${ext}`);
     } else {
       storagePath = sanitizeStorageKey(`photos/day${dayNumber}/${req.file.originalname}`);
     }
@@ -249,10 +338,12 @@ app.post('/api/days/:dayNumber/upload', requireAdmin, upload.single('file'), asy
       photo_paths: existing?.photo_paths ?? [],
       image_path: existing?.image_path ?? null,
       audio_path: existing?.audio_path ?? null,
+      background_path: existing?.background_path ?? null,
     };
 
     if (type === 'main') patch.image_path = storagePath;
     else if (type === 'audio') patch.audio_path = storagePath;
+    else if (type === 'background') patch.background_path = storagePath;
     else patch.photo_paths = [...new Set([...(patch.photo_paths || []), storagePath])];
 
     const { data, error } = await supabase
@@ -361,6 +452,7 @@ app.post('/api/days/:dayNumber/delete-media', requireAdmin, async (req, res) => 
         gift_message: existing.gift_message ?? null,
         image_path: paths.includes(existing.image_path) ? null : existing.image_path,
         audio_path: paths.includes(existing.audio_path) ? null : existing.audio_path,
+        background_path: paths.includes(existing.background_path) ? null : existing.background_path,
         photo_paths: (existing.photo_paths || []).filter((path) => !paths.includes(path)),
       };
       await supabase.from('days').upsert(patch, { onConflict: 'day_number' });

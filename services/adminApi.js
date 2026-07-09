@@ -124,4 +124,19 @@ export const AdminApi = {  verify(password) {
       body: JSON.stringify(payload),
     });
   },
+
+  uploadGlobalBackground(file) {
+    const form = new FormData();
+    form.append('file', file);
+    return adminFetch('/api/app-config/background', {
+      method: 'POST',
+      body: form,
+    });
+  },
+
+  deleteGlobalBackground() {
+    return adminFetch('/api/app-config/background', {
+      method: 'DELETE',
+    });
+  },
 };

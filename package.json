@@ -27,7 +27,8 @@
     "generate:vapid": "node scripts/generate-vapid-keys.mjs",
     "setup:push": "node scripts/setup-push-table.mjs",
     "setup:timezone": "node scripts/setup-timezone.mjs",
-    "setup:notification-hour": "node scripts/setup-notification-hour.mjs"
+    "setup:notification-hour": "node scripts/setup-notification-hour.mjs",
+    "setup:backgrounds": "node scripts/setup-backgrounds.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",

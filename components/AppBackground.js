@@ -2,13 +2,15 @@ import React from 'react';
 import { ImageBackground, StyleSheet, View, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const BACKGROUND_IMAGE = require('../assets/images/fondo.png');
+const DEFAULT_BACKGROUND = require('../assets/images/fondo.png');
 
-export default function AppBackground({ children, overlayColors, style }) {
+export default function AppBackground({ children, overlayColors, style, imageUrl = null }) {
+  const source = imageUrl ? { uri: imageUrl } : DEFAULT_BACKGROUND;
+
   return (
     <View style={[styles.root, style]}>
       <ImageBackground
-        source={BACKGROUND_IMAGE}
+        source={source}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
         accessibilityIgnoresInvertColors

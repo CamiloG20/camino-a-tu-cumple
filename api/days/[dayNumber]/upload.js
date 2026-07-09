@@ -48,7 +48,14 @@ export default async function handler(req, res) {
     const fs = await import('fs/promises');
     const buffer = await fs.readFile(file.filepath);
     const typeField = fields.type?.[0] || fields.type || 'main';
-    const type = typeField === 'extra' ? 'extra' : typeField === 'audio' ? 'audio' : 'main';
+    const type =
+      typeField === 'extra'
+        ? 'extra'
+        : typeField === 'audio'
+          ? 'audio'
+          : typeField === 'background'
+            ? 'background'
+            : 'main';
 
     const bucket = getStorageBucket();
     const supabase = getAdminSupabase();
@@ -65,6 +72,9 @@ export default async function handler(req, res) {
     } else if (type === 'audio') {
       const ext = originalName.split('.').pop() || 'mp3';
       storagePath = sanitizeStorageKey(`sounds/${dayNumber}.${ext}`);
+    } else if (type === 'background') {
+      const ext = originalName.split('.').pop() || 'jpg';
+      storagePath = sanitizeStorageKey(`backgrounds/day${dayNumber}.${ext}`);
     } else {
       storagePath = sanitizeStorageKey(`photos/day${dayNumber}/${originalName}`);
     }
@@ -90,10 +100,12 @@ export default async function handler(req, res) {
       photo_paths: existing?.photo_paths ?? [],
       image_path: existing?.image_path ?? null,
       audio_path: existing?.audio_path ?? null,
+      background_path: existing?.background_path ?? null,
     };
 
     if (type === 'main') patch.image_path = storagePath;
     else if (type === 'audio') patch.audio_path = storagePath;
+    else if (type === 'background') patch.background_path = storagePath;
     else patch.photo_paths = [...new Set([...(patch.photo_paths || []), storagePath])];
 
     const { data, error } = await supabase

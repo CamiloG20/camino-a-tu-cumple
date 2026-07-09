@@ -60,7 +60,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const screenWidth = getContentWidth(windowWidth);
   const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
   const isOnline = useNetworkStatus();
-  const { notificationHour } = useAppConfig();
+  const { notificationHour, globalBackgroundUrl } = useAppConfig();
 
   const [todayIndex, setTodayIndex] = useState(0);
   const [viewed, setViewed] = useState({});
@@ -379,6 +379,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const activeBackgroundOverlay = isBirthdayDay
     ? BIRTHDAY_BACKGROUND_OVERLAY_COLORS
     : BACKGROUND_OVERLAY_COLORS;
+  const activeBackgroundUrl = currentDay?.backgroundUrl || globalBackgroundUrl || null;
 
   const mainContent = (
     <>
@@ -614,7 +615,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   if (!isOnline && loadError && !days.length) {
     return (
-      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container}>
+      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container} imageUrl={globalBackgroundUrl}>
         <StatusBar style="light" />
         <OfflineScreen onRetry={() => setReloadToken((n) => n + 1)} />
       </AppBackground>
@@ -623,7 +624,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   if (loading) {
     return (
-      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container}>
+      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container} imageUrl={globalBackgroundUrl}>
         <StatusBar style="light" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#fff" />
@@ -635,7 +636,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   if (loadError && !days.length) {
     return (
-      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container}>
+      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container} imageUrl={globalBackgroundUrl}>
         <StatusBar style="light" />
         <OfflineScreen onRetry={() => setReloadToken((n) => n + 1)} />
       </AppBackground>
@@ -644,7 +645,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   if (eventNotStarted && !adminPreview) {
     return (
-      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container}>
+      <AppBackground overlayColors={BACKGROUND_OVERLAY_COLORS} style={styles.container} imageUrl={globalBackgroundUrl}>
         <StatusBar style="light" />
         <View style={styles.preStartWrap}>
           <DailyNotificationBanner active notificationHour={notificationHour} />
@@ -661,6 +662,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     <AppBackground
       overlayColors={activeBackgroundOverlay}
       style={[styles.container, Platform.OS === 'web' && styles.webRoot]}
+      imageUrl={activeBackgroundUrl}
     >
       <StatusBar style="light" />
       <ScrollView

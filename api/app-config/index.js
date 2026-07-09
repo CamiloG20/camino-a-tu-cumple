@@ -6,8 +6,7 @@ import {
 } from '../_lib/admin.js';
 import { parseJsonBody } from '../_lib/parseBody.js';
 import {
-  APP_TIMEZONE_LABEL,
-  fetchNotificationHourFromDb,
+  buildPublicAppConfigPayload,
   normalizeNotificationHour,
   updateNotificationHourInDb,
 } from '../_lib/appConfig.js';
@@ -21,15 +20,14 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       try {
         const supabase = getAdminSupabase();
-        const notificationHour = await fetchNotificationHourFromDb(supabase);
-        return res.status(200).json({
-          notificationHour,
-          timezone: APP_TIMEZONE_LABEL,
-        });
+        const payload = await buildPublicAppConfigPayload(supabase);
+        return res.status(200).json(payload);
       } catch {
         return res.status(200).json({
           notificationHour: DEFAULT_HOUR,
-          timezone: APP_TIMEZONE_LABEL,
+          timezone: 'America/Guayaquil',
+          backgroundPath: null,
+          backgroundUrl: null,
         });
       }
     }
@@ -49,11 +47,14 @@ export default async function handler(req, res) {
 
       const supabase = getAdminSupabase();
       const saved = await updateNotificationHourInDb(supabase, notificationHour);
+      const payload = await buildPublicAppConfigPayload(supabase);
 
       return res.status(200).json({
         ok: true,
         notificationHour: saved,
-        timezone: APP_TIMEZONE_LABEL,
+        timezone: payload.timezone,
+        backgroundPath: payload.backgroundPath,
+        backgroundUrl: payload.backgroundUrl,
       });
     }
 
