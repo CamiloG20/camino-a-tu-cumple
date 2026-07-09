@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import { createAdminToken, verifyAdminToken } from '../../lib/adminToken.js';
 import { sanitizeStorageKey } from '../../lib/storageSanitize.js';
-import { isVercelHostname, PRODUCTION_URL } from '../../lib/site.js';
+import { PRODUCTION_URL } from '../../lib/site.js';
+import { checkRateLimit, getClientIp } from './rateLimit.js';
 
-export { sanitizeStorageKey };
+export { sanitizeStorageKey, createAdminToken, verifyAdminToken };
 
 let client;
 
@@ -30,7 +32,9 @@ function isAllowedRequestOrigin(origin, req) {
   if (allowed && origin === allowed) return true;
 
   try {
-    const { hostname } = new URL(origin);
+    const { hostname, protocol } = new URL(origin);
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+
     const requestHost = (req?.headers?.['x-forwarded-host'] || req?.headers?.host || '')
       .split(',')[0]
       .trim()
@@ -38,7 +42,6 @@ function isAllowedRequestOrigin(origin, req) {
 
     if (requestHost && hostname === requestHost) return true;
     if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
-    if (isVercelHostname(hostname)) return true;
   } catch {
     return false;
   }
@@ -54,12 +57,15 @@ export function setCors(res, req) {
   } else if (!origin) {
     res.setHeader('Access-Control-Allow-Origin', getAllowedOrigin() || '*');
   } else {
-    res.setHeader('Access-Control-Allow-Origin', getAllowedOrigin() || 'null');
+    res.setHeader('Access-Control-Allow-Origin', 'null');
   }
 
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-password');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, x-admin-password'
+  );
 }
 
 export function getStorageBucket() {
@@ -80,17 +86,58 @@ export function getAdminSupabase() {
   return client;
 }
 
-export function requireAdmin(req, res) {
+export function extractAdminToken(req) {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  return null;
+}
+
+export function isAdminAuthorized(req) {
+  const token = extractAdminToken(req);
+  if (token && verifyAdminToken(token)) {
+    return true;
+  }
+
   const password = getAdminPassword();
-  if (!password) {
+  if (!password) return false;
+  return req.headers['x-admin-password'] === password;
+}
+
+export function requireAdmin(req, res, { rateLimitKey = 'admin' } = {}) {
+  const ip = getClientIp(req);
+  const limit = checkRateLimit(`${rateLimitKey}:${ip}`, {
+    maxAttempts: 120,
+    windowMs: 15 * 60 * 1000,
+  });
+
+  if (!limit.allowed) {
+    res.status(429).json({
+      error: 'Demasiadas solicitudes. Espera unos minutos e inténtalo de nuevo.',
+    });
+    return false;
+  }
+
+  if (!getAdminPassword() && !getTokenSecret()) {
     res.status(500).json({ error: 'ADMIN_PASSWORD no configurado en Vercel' });
     return false;
   }
-  if (req.headers['x-admin-password'] !== password) {
-    res.status(401).json({ error: 'Contraseña incorrecta' });
+
+  if (!isAdminAuthorized(req)) {
+    res.status(401).json({ error: 'No autorizado' });
     return false;
   }
+
   return true;
+}
+
+function getTokenSecret() {
+  return (
+    process.env.ADMIN_TOKEN_SECRET?.trim() ||
+    process.env.ADMIN_PASSWORD?.trim() ||
+    ''
+  );
 }
 
 export async function deleteStoragePaths(paths) {
@@ -98,7 +145,7 @@ export async function deleteStoragePaths(paths) {
   const supabase = getAdminSupabase();
   const keys = paths
     .filter((path) => path && typeof path === 'string' && !path.startsWith('http'))
-    .map((path) => sanitizeStorageKey(path.replace(/^\/+/, '')));
+    .map((path) => sanitizeStorageKey(path));
 
   if (!keys.length) return;
 
@@ -108,9 +155,17 @@ export async function deleteStoragePaths(paths) {
 
 export function handleOptions(req, res) {
   if (req.method === 'OPTIONS') {
-    setCors(res, req);
     res.status(204).end();
     return true;
   }
   return false;
+}
+
+export async function createSignedMediaUrl(path, expiresIn = 3600) {
+  const bucket = getStorageBucket();
+  const supabase = getAdminSupabase();
+  const key = sanitizeStorageKey(path);
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(key, expiresIn);
+  if (error) throw error;
+  return data.signedUrl;
 }

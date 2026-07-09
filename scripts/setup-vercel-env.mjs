@@ -17,9 +17,12 @@ const PUBLIC_VARS = [
   'EXPO_PUBLIC_SUPABASE_URL',
   'EXPO_PUBLIC_SUPABASE_ANON_KEY',
   'EXPO_PUBLIC_SUPABASE_STORAGE_BUCKET',
+  'EXPO_PUBLIC_BIRTHDAY_MONTH',
+  'EXPO_PUBLIC_BIRTHDAY_DAY',
+  'EXPO_PUBLIC_SITE_URL',
 ];
 
-const SERVER_VARS = ['ADMIN_PASSWORD', 'SUPABASE_SERVICE_ROLE_KEY'];
+const SERVER_VARS = ['ADMIN_PASSWORD', 'SUPABASE_SERVICE_ROLE_KEY', 'ADMIN_TOKEN_SECRET'];
 
 if (!existsSync(envPath)) {
   console.error('❌ No existe .env');
@@ -37,6 +40,20 @@ for (const line of readFileSync(envPath, 'utf8').split('\n')) {
 
 console.log('\n📦 Configurando variables en Vercel (production + preview)...\n');
 
+function upsertEnv(key, value, target) {
+  try {
+    execSync(`npx vercel env rm ${key} ${target} --yes`, { cwd: root, stdio: 'ignore' });
+  } catch {
+    // no existía
+  }
+
+  execSync(`npx vercel env add ${key} ${target}`, {
+    cwd: root,
+    input: value,
+    stdio: ['pipe', 'inherit', 'inherit'],
+  });
+}
+
 for (const key of PUBLIC_VARS) {
   const value = env[key];
   if (!value) {
@@ -45,17 +62,7 @@ for (const key of PUBLIC_VARS) {
   }
 
   for (const target of ['production', 'preview']) {
-    try {
-      execSync(`npx vercel env rm ${key} ${target} --yes`, { cwd: root, stdio: 'ignore' });
-    } catch {
-      // no existía
-    }
-
-    execSync(`npx vercel env add ${key} ${target}`, {
-      cwd: root,
-      input: value,
-      stdio: ['pipe', 'inherit', 'inherit'],
-    });
+    upsertEnv(key, value, target);
     console.log(`✓ ${key} → ${target}`);
   }
 }
@@ -67,18 +74,8 @@ for (const key of SERVER_VARS) {
     continue;
   }
 
-  for (const target of ['production', 'preview']) {
-    try {
-      execSync(`npx vercel env rm ${key} ${target} --yes`, { cwd: root, stdio: 'ignore' });
-    } catch {
-      // no existía
-    }
-
-    execSync(`npx vercel env add ${key} ${target}`, {
-      cwd: root,
-      input: value,
-      stdio: ['pipe', 'inherit', 'inherit'],
-    });
+  for (const target of ['production']) {
+    upsertEnv(key, value, target);
     console.log(`✓ ${key} → ${target}`);
   }
 }

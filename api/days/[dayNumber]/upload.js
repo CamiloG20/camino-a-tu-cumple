@@ -1,3 +1,4 @@
+import { parseDayNumber } from '../../../lib/dayValidation.js';
 import formidable from 'formidable';
 import { isAllowedUpload } from '../../../lib/storageSanitize.js';
 import {
@@ -32,9 +33,9 @@ export default async function handler(req, res) {
   }
   if (!requireAdmin(req, res)) return;
 
-  const dayNumber = Number(req.query.dayNumber);
-  if (Number.isNaN(dayNumber)) {
-    return res.status(400).json({ error: 'Día inválido' });
+  const dayNumber = parseDayNumber(req.query.dayNumber);
+  if (dayNumber == null) {
+    return res.status(400).json({ error: 'Día inválido (0-31)' });
   }
 
   try {

@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSupabase } from '../lib/supabase';
-import { isSupabaseConfigured, STORAGE_BUCKET } from '../lib/config';
+import { isSupabaseConfigured } from '../lib/config';
+import { resolveStorageUrl } from '../lib/mediaUrl';
 import { TOTAL_EVENT_DAYS } from '../lib/calendar';
 
-const DAYS_CACHE_KEY = 'daysCache_v1';
+const DAYS_CACHE_KEY = 'daysCache_v2';
 
 const PLACEHOLDER_IMAGE =
   'https://via.placeholder.com/400x400/cccccc/ffffff?text=Imagen+no+disponible';
@@ -22,26 +23,8 @@ function mapDayRow(row) {
   };
 }
 
-function isHttpUrl(value) {
-  return typeof value === 'string' && /^https?:\/\//i.test(value);
-}
-
-function getStoragePublicUrl(path) {
-  const supabase = getSupabase();
-  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
-}
-
-async function resolveMediaUrl(path) {
-  if (!path || typeof path !== 'string') {
-    return null;
-  }
-
-  if (isHttpUrl(path)) {
-    return path;
-  }
-
-  return getStoragePublicUrl(path.replace(/^\/+/, ''));
+function mapAdminDayRow(row) {
+  return mapDayRow(row);
 }
 
 async function getDayPhotos(day) {
@@ -56,11 +39,11 @@ async function getDayPhotos(day) {
   };
 
   if (day.imagePath) {
-    addPhoto(await resolveMediaUrl(day.imagePath));
+    addPhoto(await resolveStorageUrl(day.imagePath));
   }
 
   if (Array.isArray(day.photoPaths) && day.photoPaths.length) {
-    const extraUrls = await Promise.all(day.photoPaths.map((path) => resolveMediaUrl(path)));
+    const extraUrls = await Promise.all(day.photoPaths.map((path) => resolveStorageUrl(path)));
     extraUrls.forEach(addPhoto);
   }
 
@@ -71,8 +54,11 @@ async function getDayPhotos(day) {
   return photos;
 }
 
-function lightEnrichDay(day) {
-  const imageUrl = day.imagePath ? getStoragePublicUrl(day.imagePath) : PLACEHOLDER_IMAGE;
+async function lightEnrichDay(day) {
+  const imageUrl = day.imagePath
+    ? (await resolveStorageUrl(day.imagePath)) ?? PLACEHOLDER_IMAGE
+    : PLACEHOLDER_IMAGE;
+
   return {
     ...day,
     imageUrl,
@@ -83,8 +69,8 @@ function lightEnrichDay(day) {
 }
 
 async function enrichDay(day) {
-  const imageUrl = (await resolveMediaUrl(day.imagePath)) ?? PLACEHOLDER_IMAGE;
-  const audioUrl = day.audioPath ? await resolveMediaUrl(day.audioPath) : null;
+  const imageUrl = (await resolveStorageUrl(day.imagePath)) ?? PLACEHOLDER_IMAGE;
+  const audioUrl = day.audioPath ? await resolveStorageUrl(day.audioPath) : null;
   const photos = await getDayPhotos(day);
 
   return {
@@ -97,25 +83,33 @@ async function enrichDay(day) {
 }
 
 export class DataService {
-  static async getDays() {
+  static async getUnlockedDays() {
     const supabase = getSupabase();
-    const { data, error } = await supabase
-      .from('days')
-      .select('*')
-      .order('day_number', { ascending: false });
+    const { data, error } = await supabase.rpc('get_unlocked_days');
 
     if (error) {
+      if (error.code === 'PGRST202' || /get_unlocked_days/i.test(error.message || '')) {
+        const fallback = await supabase
+          .from('days')
+          .select('*')
+          .order('day_number', { ascending: false });
+        if (fallback.error) throw fallback.error;
+        return (fallback.data ?? []).map(mapDayRow);
+      }
       throw error;
     }
 
     return (data ?? []).map(mapDayRow);
   }
 
-  /** Carga rápida: solo metadatos + URL de imagen principal (sin listar Storage ni audio) */
-  /** Carga ligera con caché offline de los 32 días. */
-  static async loadDaysWithCache() {
+  static mapAdminDays(rows) {
+    return (rows ?? []).map(mapAdminDayRow);
+  }
+
+  static async loadDaysWithCache({ adminDays = null } = {}) {
     try {
-      const days = await this.getAllDaysLight();
+      const rawDays = adminDays ?? (await this.getUnlockedDays());
+      const days = await Promise.all(rawDays.map((day) => lightEnrichDay(day)));
       await AsyncStorage.setItem(DAYS_CACHE_KEY, JSON.stringify(days)).catch(() => {});
       return { days, fromCache: false };
     } catch (error) {
@@ -132,7 +126,7 @@ export class DataService {
       const raw = await AsyncStorage.getItem(DAYS_CACHE_KEY);
       if (!raw) return null;
       const days = JSON.parse(raw);
-      if (!Array.isArray(days) || days.length < TOTAL_EVENT_DAYS) {
+      if (!Array.isArray(days) || days.length === 0) {
         return null;
       }
       return days;
@@ -141,20 +135,19 @@ export class DataService {
     }
   }
 
-  static async getAllDaysLight() {
-    if (!isSupabaseConfigured()) {
+  static async getAllDaysLight({ adminDays = null } = {}) {
+    if (!isSupabaseConfigured() && !adminDays) {
       throw new Error('Supabase no está configurado');
     }
 
-    const days = await this.getDays();
+    const days = adminDays ?? (await this.getUnlockedDays());
     if (!days.length) {
       throw new Error('No hay días configurados en Supabase');
     }
 
-    return days.map(lightEnrichDay);
+    return Promise.all(days.map((day) => lightEnrichDay(day)));
   }
 
-  /** Carga completa de un día (audio, fotos extra, carrusel) */
   static async enrichDayFull(day) {
     if (day?.enriched) {
       return day;
@@ -162,13 +155,12 @@ export class DataService {
     return enrichDay(day);
   }
 
-  static async getAllDaysWithUrls() {
-    if (!isSupabaseConfigured()) {
+  static async getAllDaysWithUrls({ adminDays = null } = {}) {
+    if (!isSupabaseConfigured() && !adminDays) {
       throw new Error('Supabase no está configurado');
     }
 
-    const days = await this.getDays();
-
+    const days = adminDays ?? (await this.getUnlockedDays());
     if (!days.length) {
       throw new Error('No hay días configurados en Supabase');
     }
@@ -177,15 +169,17 @@ export class DataService {
   }
 
   static async getFallbackData() {
+    if (typeof __DEV__ !== 'undefined' && !__DEV__) {
+      throw new Error('Datos de demostración no disponibles en producción');
+    }
+
     return [
       {
         dayNumber: 31,
         text: '¡Comienza la cuenta regresiva hacia tu cumpleaños! Cada día será una nueva sorpresa.',
         imageUrl: 'https://via.placeholder.com/400x400/ff6b6b/ffffff?text=D%C3%ADa+31',
         audioUrl: null,
-        photos: [
-          'https://via.placeholder.com/400x400/ff6b6b/ffffff?text=D%C3%ADa+31',
-        ],
+        photos: ['https://via.placeholder.com/400x400/ff6b6b/ffffff?text=D%C3%ADa+31'],
         enriched: true,
       },
       {
@@ -193,9 +187,7 @@ export class DataService {
         text: 'Hoy es el primer día de nuestro camino hacia tu cumpleaños.',
         imageUrl: 'https://via.placeholder.com/400x400/6a11cb/ffffff?text=D%C3%ADa+30',
         audioUrl: null,
-        photos: [
-          'https://via.placeholder.com/400x400/6a11cb/ffffff?text=D%C3%ADa+30',
-        ],
+        photos: ['https://via.placeholder.com/400x400/6a11cb/ffffff?text=D%C3%ADa+30'],
         enriched: true,
       },
       {
@@ -203,11 +195,11 @@ export class DataService {
         text: 'El segundo día nos trae nuevas emociones y recuerdos que compartir.',
         imageUrl: 'https://via.placeholder.com/400x400/2575fc/ffffff?text=D%C3%ADa+29',
         audioUrl: null,
-        photos: [
-          'https://via.placeholder.com/400x400/2575fc/ffffff?text=D%C3%ADa+29',
-        ],
+        photos: ['https://via.placeholder.com/400x400/2575fc/ffffff?text=D%C3%ADa+29'],
         enriched: true,
       },
     ];
   }
 }
+
+export { TOTAL_EVENT_DAYS };

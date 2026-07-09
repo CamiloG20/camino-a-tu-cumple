@@ -14,9 +14,9 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { AdminApi, clearStoredAdminPassword, getStoredAdminPassword } from '../services/adminApi';
-import { getAdminApiUrl, isLocalAdminApi, STORAGE_BUCKET } from '../lib/config';
-import { getSupabase } from '../lib/supabase';
+import { AdminApi, clearStoredAdminToken, getStoredAdminToken } from '../services/adminApi';
+import { getAdminApiUrl, isLocalAdminApi } from '../lib/config';
+import { useAdminSignedUrl, useAdminSignedUrls } from '../hooks/useAdminSignedUrl';
 import ProgressiveImage from '../components/ProgressiveImage';
 import AdminDayPreview from '../components/AdminDayPreview';
 import { GRADIENT_COLORS, THEME } from '../lib/layout';
@@ -48,13 +48,6 @@ function formToPayload(form) {
 
 function formsEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function storagePathToUrl(path) {
-  if (!path) return null;
-  if (/^https?:\/\//i.test(path)) return path;
-  const { data } = getSupabase().storage.from(STORAGE_BUCKET).getPublicUrl(path.replace(/^\/+/, ''));
-  return data.publicUrl;
 }
 
 function getFileName(path) {
@@ -170,8 +163,8 @@ export default function AdminScreen() {
       if (!isActive()) return;
 
       Alert.alert('Error', error.message);
-      if (error.message.includes('Contraseña')) {
-        clearStoredAdminPassword();
+      if (error.message.includes('autorizado') || error.message.includes('Contraseña')) {
+        clearStoredAdminToken();
         setAuthed(false);
       }
     } finally {
@@ -182,7 +175,7 @@ export default function AdminScreen() {
   }, []);
 
   useEffect(() => {
-    const stored = getStoredAdminPassword();
+    const stored = getStoredAdminToken();
     if (!stored) return undefined;
 
     let cancelled = false;
@@ -194,7 +187,7 @@ export default function AdminScreen() {
         setAuthed(true);
       } catch {
         if (cancelled) return;
-        clearStoredAdminPassword();
+        clearStoredAdminToken();
         setAuthed(false);
       }
     })();
@@ -422,14 +415,15 @@ export default function AdminScreen() {
     window.location.hash = `#/preview/${selectedDay}`;
   }
 
-  const previewImageUrl = form.image_path ? storagePathToUrl(form.image_path) : null;
-  const previewPhotoUrls = (form.photo_paths || [])
-    .map((path) => storagePathToUrl(path))
-    .filter(Boolean);
-  const previewAudioUrl = form.audio_path ? storagePathToUrl(form.audio_path) : null;
+  const previewImageUrl = useAdminSignedUrl(form.image_path);
+  const previewPhotoUrls = useAdminSignedUrls(form.photo_paths || []);
+  const previewAudioUrl = useAdminSignedUrl(form.audio_path);
+  const formImageUrl = useAdminSignedUrl(form.image_path);
+  const formPhotoUrls = useAdminSignedUrls(form.photo_paths || []);
+  const formAudioUrl = useAdminSignedUrl(form.audio_path);
 
   function handleLogout() {
-    clearStoredAdminPassword();
+    clearStoredAdminToken();
     setAuthed(false);
     setDays([]);
     setSelectedDay(null);
@@ -592,7 +586,7 @@ export default function AdminScreen() {
                 {form.image_path ? (
                   <>
                     <ProgressiveImage
-                      source={{ uri: storagePathToUrl(form.image_path) }}
+                      source={{ uri: formImageUrl }}
                       style={styles.imagePreview}
                       imageStyle={styles.imagePreview}
                       resizeMode="cover"
@@ -629,7 +623,7 @@ export default function AdminScreen() {
                     {(form.photo_paths || []).map((path, index) => (
                       <View key={`${path}-${index}`} style={styles.photoItem}>
                         <ProgressiveImage
-                          source={{ uri: storagePathToUrl(path) }}
+                          source={{ uri: formPhotoUrls[index] }}
                           style={styles.photoThumb}
                           imageStyle={styles.photoThumb}
                           resizeMode="cover"
@@ -670,7 +664,7 @@ export default function AdminScreen() {
                 {form.audio_path ? (
                   <>
                     <WebAudioPlayer
-                      src={storagePathToUrl(form.audio_path)}
+                      src={formAudioUrl}
                       title={getFileName(form.audio_path)}
                     />
                   </>

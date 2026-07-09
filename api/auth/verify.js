@@ -1,4 +1,9 @@
-import { getAdminPassword, setCors, handleOptions } from '../_lib/admin.js';
+import {
+  createAdminToken,
+  getAdminPassword,
+  setCors,
+  handleOptions,
+} from '../_lib/admin.js';
 import { parseJsonBody } from '../_lib/parseBody.js';
 import { checkRateLimit, getClientIp } from '../_lib/rateLimit.js';
 
@@ -32,5 +37,10 @@ export default function handler(req, res) {
     return res.status(401).json({ error: 'Contraseña incorrecta' });
   }
 
-  return res.status(200).json({ ok: true });
+  try {
+    const token = createAdminToken();
+    return res.status(200).json({ ok: true, token, expiresInHours: 8 });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'No se pudo crear la sesión' });
+  }
 }

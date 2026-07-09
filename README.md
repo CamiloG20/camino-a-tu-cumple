@@ -12,13 +12,16 @@ App de cuenta regresiva personalizada (**32 días**, del **31 al 0**): del **9 d
 
 ```bash
 cp .env.example .env
-# Completa EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY, ADMIN_PASSWORD, SUPABASE_SERVICE_ROLE_KEY
+# Completa EXPO_PUBLIC_SUPABASE_*, EXPO_PUBLIC_BIRTHDAY_*, ADMIN_PASSWORD, SUPABASE_SERVICE_ROLE_KEY
 
 npm install
-npm run setup:party-bel   # Crea tabla y bucket en Supabase
-npm run assign:gifts      # Asigna los 12 días de regalo en la BD
-npm run verify:project    # Audita días, imágenes y audios
+npm run setup:party-bel      # Crea tabla y bucket en Supabase
+npm run setup:secure-rls     # Protege sorpresas futuras (RLS + bucket privado)
+npm run assign:gifts         # Asigna los 12 días de regalo en la BD
+npm run verify:project       # Audita días, imágenes y audios
 ```
+
+> **Importante:** `setup:secure-rls` requiere `POSTGRES_PASSWORD` y `POSTGRES_PROJECT_REF` en `.env`. Sin este paso, los días futuros serían accesibles vía API.
 
 ## Desarrollo
 
@@ -34,14 +37,17 @@ Panel admin: `http://localhost:8081/#/admin`
 | Variable | Descripción |
 |----------|-------------|
 | `EXPO_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase |
-| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Clave anónima (solo lectura en la app) |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Clave anónima (solo lectura filtrada en la app) |
 | `EXPO_PUBLIC_SUPABASE_STORAGE_BUCKET` | Bucket de media (default: `media`) |
-| `EXPO_PUBLIC_BIRTHDAY_MONTH` | Mes del **fin** del camino / cumpleaños (1–12, default: **8 = agosto**) |
-| `EXPO_PUBLIC_BIRTHDAY_DAY` | Día del fin (default: **9**). El inicio (día 31) es el **9 de julio** automáticamente |
-| `EXPO_PUBLIC_ADMIN_API_URL` | Solo para desarrollo local (`http://localhost:8787`). En Vercel no hace falta: usa el mismo dominio |
-| `ADMIN_PASSWORD` | Contraseña del panel admin (solo servidor) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Clave service role (solo servidor, nunca en el cliente) |
-| `ADMIN_ALLOWED_ORIGIN` | Opcional. En Vercel app y API comparten dominio; se detecta solo con `VERCEL_URL` |
+| `EXPO_PUBLIC_BIRTHDAY_MONTH` | Mes del cumpleaños / fin del camino (1–12, default: **8**) |
+| `EXPO_PUBLIC_BIRTHDAY_DAY` | Día del fin (default: **9**) |
+| `EXPO_PUBLIC_SITE_URL` | URL pública (default: producción Vercel) |
+| `EXPO_PUBLIC_ADMIN_API_URL` | Solo desarrollo local (`http://localhost:8787`) |
+| `ADMIN_PASSWORD` | Contraseña del panel admin |
+| `ADMIN_TOKEN_SECRET` | Opcional. Firma tokens de sesión admin (default: `ADMIN_PASSWORD`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Solo servidor / scripts |
+| `POSTGRES_PROJECT_REF` | Ref del proyecto (scripts SQL) |
+| `POSTGRES_PASSWORD` | Password de Postgres (scripts SQL) |
 
 ## URLs en producción (Vercel)
 
@@ -50,72 +56,59 @@ Panel admin: `http://localhost:8081/#/admin`
 | **App** | https://camino-a-tu-cumple.vercel.app |
 | **Admin** | https://camino-a-tu-cumple.vercel.app/#/admin |
 | **API** | https://camino-a-tu-cumple.vercel.app/api/* |
-| **Preview** | `camino-a-tu-cumple-*-camilos-projects-*.vercel.app` (también funciona) |
-
-La app y la API comparten el mismo dominio. No configures `EXPO_PUBLIC_ADMIN_API_URL` en Vercel.
+| **Health** | https://camino-a-tu-cumple.vercel.app/api/health |
 
 ## Deploy en Vercel
 
 ```bash
-npm run build:web
+npm run setup:vercel-env   # Sube variables desde .env (solo production para secretos)
 npm run deploy:vercel
 ```
 
-Configura en Vercel las variables `EXPO_PUBLIC_*`, `ADMIN_PASSWORD` y `SUPABASE_SERVICE_ROLE_KEY`.
+Variables obligatorias en Vercel: `EXPO_PUBLIC_*`, `EXPO_PUBLIC_BIRTHDAY_MONTH=8`, `EXPO_PUBLIC_BIRTHDAY_DAY=9`, `ADMIN_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`.
 
-**No necesitas** `EXPO_PUBLIC_ADMIN_API_URL` ni `ADMIN_ALLOWED_ORIGIN`: todo va por `https://camino-a-tu-cumple.vercel.app`.
+**Nota:** yt-dlp solo funciona con el admin local (`npm run admin:server`).
 
-**Nota:** La descarga con yt-dlp solo funciona con el servidor admin local (`npm run admin:server`). En Vercel sube los MP3 manualmente.
+## Seguridad
+
+- **Sorpresas:** Supabase expone solo días desbloqueados (`get_unlocked_days`) y media con URLs firmadas.
+- **Preview:** `#/preview/{día}` requiere sesión admin activa.
+- **Admin:** Login devuelve token Bearer (8 h). Rate limit en auth y endpoints admin.
+- **Cabeceras:** CSP, HSTS, Referrer-Policy en `vercel.json`.
+
+Tras cambiar cumpleaños en `.env`, actualiza Supabase:
+
+```bash
+npm run setup:secure-rls
+```
 
 ## Estructura
 
-- `App.js` — Pantalla principal (cuenta regresiva, galería, audio)
+- `App.js` — Pantalla principal
 - `screens/AdminScreen.js` — Panel admin web
 - `api/` — Endpoints serverless (Vercel)
 - `server/admin-server.mjs` — API admin local (+ yt-dlp)
-- `services/dataService.js` — Lectura de días desde Supabase
-- `lib/giftSchedule.js` — Mensajes de regalo (los días de regalo vienen de la BD)
+- `services/dataService.js` — Lectura filtrada desde Supabase
+- `lib/calendar.js` — Fechas del evento (9 jul → 9 ago)
+- `supabase/migrations/` — SQL (schema, RLS seguro)
 - `scripts/verify-project.mjs` — Auditoría del proyecto
 
-## Panel admin — qué puedes editar
+## Panel admin
 
-En `/#/admin` puedes modificar **todo lo que ve la app** por cada día:
+En `/#/admin` puedes editar por cada día: mensaje, imagen, fotos extra, audio, regalo y mensaje del regalo.
 
-| Campo | Qué controla en la app |
-|-------|------------------------|
-| **Mensaje** | Texto debajo del contador |
-| **Imagen principal** | Foto del día |
-| **Fotos extra** | Carrusel horizontal |
-| **Audio / canción** | Reproductor con seek |
-| **Regalo** | Badge, botón y modal de sorpresa |
-| **Mensaje del regalo** | Texto personalizado dentro del modal |
-
-- **Vista previa** en el panel: ves el día tal como lo verá él (incluye cambios sin guardar).
-- **Abrir en la app** (`#/preview/31`): prueba el día completo en la app real; en modo preview puedes navegar todos los días.
-
-Si la BD ya existía, ejecuta una vez en Supabase SQL Editor:
-
-```sql
-alter table public.days add column if not exists gift_message text;
-```
-
-(o el archivo `supabase/migrations/001_add_gift_message.sql`).
-
-## Regalos
-
-Los días de regalo se leen desde Supabase (`has_gift`, `gift_number`, `gift_message`). Para generarlos según el calendario fijo:
-
-```bash
-npm run assign:gifts
-```
-
-También puedes editarlos manualmente en el panel admin.
+- **Vista previa** en el panel (con URLs firmadas).
+- **Abrir en la app** (`#/preview/31`): requiere login admin; navegas todos los días.
 
 ## Scripts útiles
 
 | Script | Uso |
 |--------|-----|
 | `npm run verify:project` | Comprueba 32 días, imágenes, audios y regalos |
-| `npm run assign:gifts` | Escribe los 12 días de regalo en la BD |
-| `npm run migrate:supabase` | Copia datos entre proyectos Supabase |
+| `npm run setup:secure-rls` | Aplica RLS + bucket privado en Supabase |
+| `npm run assign:gifts` | Escribe los 12 días de regalo |
+| `npm run setup:vercel-env` | Sube env a Vercel |
+| `npm run generate:icons` | Regenera favicon e iconos PWA |
 | `npm run build:web` | Build PWA + service worker |
+
+Guía paso a paso antes del lanzamiento: **`CHECKLIST-LANZAMIENTO.md`**.

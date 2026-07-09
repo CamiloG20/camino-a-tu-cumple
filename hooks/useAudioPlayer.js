@@ -86,19 +86,8 @@ export function useAudioPlayer(audioUrl) {
   }, [attachPlaybackListener, audioUrl, hasValidAudio]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      await unloadSound();
-      if (cancelled || !hasValidAudio) return;
-      await loadSound();
-    })();
-
-    return () => {
-      cancelled = true;
-      unloadSound();
-    };
-  }, [audioUrl, hasValidAudio, loadSound, unloadSound]);
+    unloadSound();
+  }, [audioUrl, unloadSound]);
 
   const togglePlayback = useCallback(async () => {
     if (!hasValidAudio) {

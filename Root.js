@@ -1,19 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
+import { Platform, ActivityIndicator, View } from 'react-native';
 import App from './App';
-import AdminScreen from './screens/AdminScreen';
 import PwaUpdateBanner from './components/PwaUpdateBanner';
+import PreviewGate from './components/PreviewGate';
+import { isAdminAuthenticated } from './services/adminApi';
+
+const AdminScreen = lazy(() => import('./screens/AdminScreen'));
 
 function parsePreviewDay(hash) {
   const match = hash.match(/^#\/preview\/(\d+)/);
   if (!match) return null;
   const day = Number(match[1]);
-  return Number.isNaN(day) ? null : day;
+  if (Number.isNaN(day) || day < 0 || day > 31) return null;
+  return day;
+}
+
+function AdminFallback() {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <ActivityIndicator size="large" color="#6a11cb" />
+    </View>
+  );
 }
 
 function Root() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [previewDayNumber, setPreviewDayNumber] = useState(null);
+  const [previewBlocked, setPreviewBlocked] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
@@ -35,14 +48,17 @@ function Root() {
     const updateRoute = () => {
       const { hash, pathname, search } = window.location;
       const previewDay = parsePreviewDay(hash);
-      const isAdmin =
+      const adminRoute =
         !previewDay &&
         (hash.startsWith('#/admin') ||
           pathname === '/admin' ||
           pathname.endsWith('/admin') ||
           search === '?/admin');
-      setPreviewDayNumber(previewDay);
-      setIsAdmin(isAdmin);
+
+      const blockedPreview = previewDay != null && !isAdminAuthenticated();
+      setPreviewDayNumber(blockedPreview ? null : previewDay);
+      setPreviewBlocked(blockedPreview);
+      setIsAdmin(adminRoute);
     };
 
     const onPwaUpdate = () => setUpdateAvailable(true);
@@ -54,9 +70,11 @@ function Root() {
     }
 
     window.addEventListener('hashchange', updateRoute);
+    window.addEventListener('storage', updateRoute);
     window.addEventListener('pwa-update-available', onPwaUpdate);
     return () => {
       window.removeEventListener('hashchange', updateRoute);
+      window.removeEventListener('storage', updateRoute);
       window.removeEventListener('pwa-update-available', onPwaUpdate);
     };
   }, []);
@@ -71,13 +89,24 @@ function Root() {
     window.location.reload();
   }
 
+  function goToAdmin() {
+    if (typeof window === 'undefined') return;
+    window.location.hash = '#/admin';
+  }
+
+  const blockedDay = previewBlocked ? parsePreviewDay(window.location.hash) : null;
+
   return (
     <>
       <PwaUpdateBanner visible={updateAvailable} onReload={reloadApp} />
       {isAdmin ? (
-        <AdminScreen />
+        <Suspense fallback={<AdminFallback />}>
+          <AdminScreen />
+        </Suspense>
+      ) : previewBlocked && blockedDay != null ? (
+        <PreviewGate dayNumber={blockedDay} onGoAdmin={goToAdmin} />
       ) : (
-        <App previewDayNumber={previewDayNumber} />
+        <App previewDayNumber={previewDayNumber} adminPreview={previewDayNumber != null} />
       )}
     </>
   );

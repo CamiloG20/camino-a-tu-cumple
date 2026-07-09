@@ -5,6 +5,8 @@ import { loadEnv, sanitizeStorageKey } from './lib/env.mjs';
 import { getAdminSupabase, getStorageBucket } from './lib/supabaseAdmin.mjs';
 import { downloadAudioMp3 } from './lib/ytdlp.mjs';
 import { isAllowedUpload } from '../lib/storageSanitize.js';
+import { createAdminToken, verifyAdminToken } from '../lib/adminToken.js';
+import { parseDayNumber } from '../lib/dayValidation.js';
 
 const authAttempts = new Map();
 
@@ -27,20 +29,43 @@ const ADMIN_PASSWORD = env.ADMIN_PASSWORD || '';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Origen no permitido'), false);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '2mb' }));
+
+function extractAdminToken(req) {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  return null;
+}
 
 function requireAdmin(req, res, next) {
   if (!ADMIN_PASSWORD) {
     return res.status(500).json({ error: 'ADMIN_PASSWORD no configurado en .env' });
   }
 
-  const headerPassword = req.headers['x-admin-password'];
-  if (headerPassword !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Contraseña incorrecta' });
+  const token = extractAdminToken(req);
+  if (token && verifyAdminToken(token)) {
+    return next();
   }
 
-  next();
+  if (req.headers['x-admin-password'] === ADMIN_PASSWORD) {
+    return next();
+  }
+
+  return res.status(401).json({ error: 'No autorizado' });
 }
 
 app.get('/api/health', (_req, res) => {
@@ -60,7 +85,25 @@ app.post('/api/auth/verify', (req, res) => {
   if (password !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Contraseña incorrecta' });
   }
-  res.json({ ok: true });
+  res.json({ ok: true, token: createAdminToken(), expiresInHours: 8 });
+});
+
+app.post('/api/media/sign', requireAdmin, async (req, res) => {
+  try {
+    const path = req.body?.path?.trim();
+    if (!path) {
+      return res.status(400).json({ error: 'path requerido' });
+    }
+
+    const bucket = getStorageBucket();
+    const supabase = getAdminSupabase();
+    const key = sanitizeStorageKey(path);
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
+    if (error) throw error;
+    res.json({ url: data.signedUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.get('/api/days', requireAdmin, async (_req, res) => {
@@ -80,7 +123,10 @@ app.get('/api/days', requireAdmin, async (_req, res) => {
 
 app.put('/api/days/:dayNumber', requireAdmin, async (req, res) => {
   try {
-    const dayNumber = Number(req.params.dayNumber);
+    const dayNumber = parseDayNumber(req.params.dayNumber);
+    if (dayNumber == null) {
+      return res.status(400).json({ error: 'Día inválido (0-31)' });
+    }
     const body = req.body ?? {};
 
     if (body.has_gift && body.gift_number != null) {
@@ -122,7 +168,10 @@ app.post('/api/days/:dayNumber/upload', requireAdmin, upload.single('file'), asy
       return res.status(400).json({ error: 'Archivo requerido' });
     }
 
-    const dayNumber = Number(req.params.dayNumber);
+    const dayNumber = parseDayNumber(req.params.dayNumber);
+    if (dayNumber == null) {
+      return res.status(400).json({ error: 'Día inválido (0-31)' });
+    }
     const type = req.body?.type === 'extra' ? 'extra' : req.body?.type === 'audio' ? 'audio' : 'main';
 
     if (!isAllowedUpload(type, req.file.mimetype, req.file.originalname)) {
@@ -192,7 +241,10 @@ app.post('/api/days/:dayNumber/download-audio', requireAdmin, async (req, res) =
       return res.status(400).json({ error: 'URL requerida' });
     }
 
-    const dayNumber = Number(req.params.dayNumber);
+    const dayNumber = parseDayNumber(req.params.dayNumber);
+    if (dayNumber == null) {
+      return res.status(400).json({ error: 'Día inválido (0-31)' });
+    }
     const bucket = getStorageBucket();
     const supabase = getAdminSupabase();
 
@@ -239,7 +291,10 @@ app.post('/api/days/:dayNumber/download-audio', requireAdmin, async (req, res) =
 
 app.post('/api/days/:dayNumber/delete-media', requireAdmin, async (req, res) => {
   try {
-    const dayNumber = Number(req.params.dayNumber);
+    const dayNumber = parseDayNumber(req.params.dayNumber);
+    if (dayNumber == null) {
+      return res.status(400).json({ error: 'Día inválido (0-31)' });
+    }
     const paths = Array.isArray(req.body?.paths) ? req.body.paths : [];
     if (!paths.length) {
       return res.status(400).json({ error: 'Se requiere al menos una ruta' });

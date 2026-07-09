@@ -36,6 +36,26 @@ function publicUrl(baseUrl, bucket, path) {
   return `${baseUrl}/storage/v1/object/public/${bucket}/${encodeStoragePath(clean)}`;
 }
 
+async function signedUrl(supabase, bucket, path) {
+  const clean = path.replace(/^\/+/, '');
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(clean, 300);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+async function mediaHeadOk(supabase, bucket, baseUrl, path) {
+  if (!path || path.startsWith('http')) {
+    return headOk(path);
+  }
+
+  try {
+    const url = await signedUrl(supabase, bucket, path);
+    return headOk(url);
+  } catch {
+    return headOk(publicUrl(baseUrl, bucket, path));
+  }
+}
+
 async function headOk(url) {
   try {
     const res = await fetch(url, { method: 'HEAD' });
@@ -118,21 +138,24 @@ async function main() {
     if (!day.image_path) {
       missingImages.push(n);
     } else if (!day.image_path.startsWith('http')) {
-      const imgUrl = publicUrl(url, bucket, day.image_path);
-      if (!(await headOk(imgUrl))) brokenImages.push({ day: n, path: day.image_path });
+      if (!(await mediaHeadOk(supabase, bucket, url, day.image_path))) {
+        brokenImages.push({ day: n, path: day.image_path });
+      }
     }
 
     if (!day.audio_path) {
       if (n !== 0) missingAudios.push(n);
     } else if (!day.audio_path.startsWith('http')) {
-      const audioUrl = publicUrl(url, bucket, day.audio_path);
-      if (!(await headOk(audioUrl))) brokenAudios.push({ day: n, path: day.audio_path });
+      if (!(await mediaHeadOk(supabase, bucket, url, day.audio_path))) {
+        brokenAudios.push({ day: n, path: day.audio_path });
+      }
     }
 
     for (const p of day.photo_paths ?? []) {
       if (!p || p.startsWith('http')) continue;
-      const photoUrl = publicUrl(url, bucket, p);
-      if (!(await headOk(photoUrl))) brokenPhotos.push({ day: n, path: p });
+      if (!(await mediaHeadOk(supabase, bucket, url, p))) {
+        brokenPhotos.push({ day: n, path: p });
+      }
     }
   }
 

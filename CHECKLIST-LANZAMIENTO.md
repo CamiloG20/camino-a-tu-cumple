@@ -20,81 +20,93 @@ EXPO_PUBLIC_BIRTHDAY_MONTH=8
 EXPO_PUBLIC_BIRTHDAY_DAY=9
 ADMIN_PASSWORD=...
 SUPABASE_SERVICE_ROLE_KEY=...
+POSTGRES_PROJECT_REF=...
+POSTGRES_PASSWORD=...
 ```
 
-> En local puedes tener también `EXPO_PUBLIC_ADMIN_API_URL=http://localhost:8787`.  
+> En local puedes tener `EXPO_PUBLIC_ADMIN_API_URL=http://localhost:8787`.  
 > **No** subas esa variable a Vercel.
 
 Si hace falta: `cp .env.example .env` y completa los valores.
 
 ---
 
-## Paso 1 — Supabase: columna `gift_message`
+## Paso 1 — Supabase: schema y seguridad
 
-Una sola vez en **Supabase → SQL Editor → Run**:
+### 1a. Columna `gift_message` (si la BD ya existía)
+
+En **Supabase → SQL Editor → Run**:
 
 ```sql
 alter table public.days add column if not exists gift_message text;
 ```
 
-Sin esto, los mensajes de regalo personalizados del admin no se guardan.
+O ejecuta `supabase/migrations/001_add_gift_message.sql`.
 
-También puedes ejecutar el archivo: `supabase/migrations/001_add_gift_message.sql`.
+### 1b. Proteger sorpresas futuras (obligatorio)
+
+Desde terminal (con `POSTGRES_PASSWORD` en `.env`):
+
+```bash
+npm run setup:secure-rls
+```
+
+Esto aplica `supabase/migrations/002_secure_rls.sql`:
+
+- RPC `get_unlocked_days` (solo días desbloqueados por fecha)
+- Bucket `media` privado + URLs firmadas
+- Tabla `app_config` con fecha de cumpleaños
+
+Sin este paso, alguien técnico podría ver sorpresas futuras.
 
 ---
 
-## Paso 2 — Auditar contenido (con tu `.env`)
+## Paso 2 — Auditar contenido
 
 ```bash
-cd /ruta/a/camino-a-tu-cumple
 npm install   # si hace falta
 npm run verify:project
 ```
 
-Revisa que haya:
+Revisa:
 
 - [ ] 32 días (31 → 0)
 - [ ] Imágenes / audios donde correspondan
 - [ ] 12 días de regalo
 
-Si los regalos no están asignados:
+Si faltan regalos:
 
 ```bash
 npm run assign:gifts
+npm run verify:project
 ```
-
-Luego vuelve a `npm run verify:project`.
 
 ---
 
 ## Paso 3 — Variables en Vercel
 
-En [Vercel](https://vercel.com) → proyecto → **Settings → Environment Variables** (Production + Preview):
-
 | Variable | Valor |
 |----------|--------|
-| `EXPO_PUBLIC_SUPABASE_URL` | tu Project URL |
+| `EXPO_PUBLIC_SUPABASE_URL` | Project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | anon key |
 | `EXPO_PUBLIC_SUPABASE_STORAGE_BUCKET` | `media` |
-| `EXPO_PUBLIC_BIRTHDAY_MONTH` | **`8`** (agosto) |
+| `EXPO_PUBLIC_BIRTHDAY_MONTH` | **`8`** |
 | `EXPO_PUBLIC_BIRTHDAY_DAY` | `9` |
-| `ADMIN_PASSWORD` | la misma del `.env` |
-| `SUPABASE_SERVICE_ROLE_KEY` | service role |
+| `EXPO_PUBLIC_SITE_URL` | `https://camino-a-tu-cumple.vercel.app` |
+| `ADMIN_PASSWORD` | clave fuerte |
+| `SUPABASE_SERVICE_ROLE_KEY` | service role (solo Production) |
 
 **No** configures `EXPO_PUBLIC_ADMIN_API_URL` en Vercel.
 
-### Opción rápida desde terminal (con `.env` y `vercel login`)
+### Opción rápida
 
 ```bash
 npm run setup:vercel-env
 ```
 
-Eso sube URL, anon, bucket, password y service role.  
-**Añade a mano** (si no están) `EXPO_PUBLIC_BIRTHDAY_MONTH=8` y `EXPO_PUBLIC_BIRTHDAY_DAY=9`.
+Los secretos (`ADMIN_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`) se suben solo a **production**.
 
-Tras cambiar variables → **Redeploy** del último deployment.
-
-O desde la máquina con `.env`:
+Tras cambiar variables → **Redeploy**:
 
 ```bash
 npm run deploy:vercel
@@ -106,67 +118,67 @@ npm run deploy:vercel
 
 | URL | Qué debe pasar |
 |-----|----------------|
-| https://camino-a-tu-cumple.vercel.app | **Antes del 9 jul:** pantalla “el camino aún no ha empezado”. **Desde el 9 jul:** día 31 (y luego el día correspondiente). |
-| https://camino-a-tu-cumple.vercel.app/api/health | `{"ok":true}` |
-| https://camino-a-tu-cumple.vercel.app/#/admin | Login y panel |
-| https://camino-a-tu-cumple.vercel.app/#/preview/31 | Vista previa del día 31 (tú); puedes navegar todos los días |
+| https://camino-a-tu-cumple.vercel.app | Antes del 9 jul: pantalla de espera. Desde el 9 jul: día correspondiente. |
+| /api/health | `{"ok":true}` |
+| /#/admin | Login → token de sesión → panel |
+| /#/preview/31 **sin login** | Pantalla “Vista previa protegida” |
+| /#/preview/31 **con login admin** | Preview completo de todos los días |
 
 Marca:
 
 - [ ] Health OK
-- [ ] Pantalla correcta según la fecha (antes vs el 9 julio)
-- [ ] Admin login + guardar un cambio de prueba
-- [ ] Preview de un día con foto / audio / regalo
-- [ ] Días futuros en galería: bloqueados (en la app real, no en preview)
-- [ ] PWA: “Añadir a pantalla de inicio” en el móvil
+- [ ] Fecha / contador correctos
+- [ ] Admin login + guardar cambio de prueba
+- [ ] Preview bloqueado sin sesión
+- [ ] Preview funciona tras login admin
+- [ ] Días futuros bloqueados en app normal
+- [ ] Icono PWA (corazón) al instalar en móvil
 
 ---
 
-## Paso 5 — Rellenar el contenido (admin)
+## Paso 5 — Contenido (admin)
 
 1. Abre `/#/admin` e inicia sesión.
-2. Por cada día (prioridad **31** y los **12 regalos**):
+2. Por cada día (prioridad **31** y **12 regalos**):
    - [ ] Mensaje
-   - [ ] Imagen principal (+ fotos extra si hay carrusel)
-   - [ ] Audio (si aplica)
-   - [ ] Si es regalo: número + mensaje del regalo
-3. Mira la **vista previa** del panel.
-4. **Guardar cambios**.
-5. Opcional: **Abrir en la app →** (`#/preview/X`) para verlo como app real.
+   - [ ] Imagen principal (+ fotos extra)
+   - [ ] Audio
+   - [ ] Regalo + mensaje (si aplica)
+3. Vista previa en panel → **Guardar**.
+4. **Abrir en la app** (`#/preview/X`) para ver como usuario (requiere sesión).
 
-### Admin local (solo si usas yt-dlp)
+### Admin local (yt-dlp)
 
 ```bash
-npm run admin:server   # API en :8787
-npm run web            # app en :8081
+npm run admin:server
+npm run web
 ```
-
-Panel: `http://localhost:8081/#/admin`
 
 ---
 
-## Checklist final (2 minutos)
+## Checklist final
 
-- [ ] SQL `gift_message` hecho
-- [ ] `EXPO_PUBLIC_BIRTHDAY_MONTH=8` en Vercel
+- [ ] `setup:secure-rls` ejecutado
+- [ ] `EXPO_PUBLIC_BIRTHDAY_MONTH=8` en Vercel + redeploy
 - [ ] `verify:project` OK
-- [ ] Día 31 listo (mensaje + imagen)
-- [ ] Regalos con mensaje personalizado (o al menos número)
-- [ ] App hoy / en fechas pre-inicio: espera bonita, no día 31
-- [ ] Admin funciona en producción
-- [ ] Redeploy hecho tras tocar env
+- [ ] Día 31 listo
+- [ ] 12 regalos con mensaje
+- [ ] Admin en producción OK
+- [ ] Preview protegido sin login
 
 ---
 
 ## Comandos útiles
 
 ```bash
-npm run verify:project      # auditoría Supabase
-npm run assign:gifts        # asignar 12 regalos en BD
-npm run setup:vercel-env    # subir env a Vercel desde .env
-npm run deploy:vercel       # build + deploy prod
-npm run admin:server        # API admin local
-npm run web                 # app local
+npm run verify:project
+npm run setup:secure-rls
+npm run assign:gifts
+npm run setup:vercel-env
+npm run deploy:vercel
+npm run generate:icons
+npm run admin:server
+npm run web
 ```
 
 ---
@@ -175,10 +187,12 @@ npm run web                 # app local
 
 | Problema | Qué revisar |
 |----------|-------------|
-| App carga “modo demo” / sin datos | `EXPO_PUBLIC_SUPABASE_*` en Vercel + redeploy |
-| Contador / día malo | `EXPO_PUBLIC_BIRTHDAY_MONTH=8` y redeploy |
-| Admin no guarda / error al login | `ADMIN_PASSWORD` y `SUPABASE_SERVICE_ROLE_KEY` en Vercel |
-| Mensaje de regalo no se guarda | Paso 1 (columna `gift_message`) |
-| yt-dlp no aparece | Solo en admin local (`npm run admin:server`), no en Vercel |
+| App sin datos | `EXPO_PUBLIC_SUPABASE_*` en Vercel + redeploy |
+| Día / contador mal | `EXPO_PUBLIC_BIRTHDAY_MONTH=8` + `setup:secure-rls` |
+| Imágenes no cargan | ¿Ejecutaste `setup:secure-rls`? (bucket privado) |
+| Admin no guarda | `ADMIN_PASSWORD` + `SUPABASE_SERVICE_ROLE_KEY` |
+| Preview abierto a todos | Redeploy con última versión (preview requiere login) |
+| Regalo no guarda mensaje | Paso 1a (`gift_message`) |
+| yt-dlp | Solo admin local, no Vercel |
 
-Más detalle del proyecto: `README.md`.
+Más detalle: `README.md`.

@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { DataService } from './services/dataService';
+import { AdminApi, isAdminAuthenticated } from './services/adminApi';
 import { isSupabaseConfigured } from './lib/config';
 import { getDaysUntilBirthday, getTodayDayIndex, getCalendarDateForDayNumber, formatCalendarDate, isBeforeEventStart, getDaysUntilEventStart, getEventStartDate } from './lib/calendar';
 import { GRADIENT_COLORS, BIRTHDAY_GRADIENT_COLORS, getContentWidth, safeArea } from './lib/layout';
@@ -30,6 +31,7 @@ import EventNotStartedScreen from './components/EventNotStartedScreen';
 import AudioSeekBar from './components/AudioSeekBar';
 import GiftModal from './components/GiftModal';
 import FallbackBanner from './components/FallbackBanner';
+import DayGallery from './components/DayGallery';
 import { getGiftMessage, resolveGiftMessage } from './lib/giftSchedule';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
@@ -45,8 +47,7 @@ function parseStorageJson(value, fallback = {}) {
   }
 }
 
-export default function App({ previewDayNumber = null }) {
-  const adminPreview = previewDayNumber != null;
+export default function App({ previewDayNumber = null, adminPreview = false }) {
   const { width: windowWidth } = useWindowDimensions();
   const screenWidth = getContentWidth(windowWidth);
   const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
@@ -176,12 +177,21 @@ export default function App({ previewDayNumber = null }) {
         let fromCache = false;
 
         try {
-          if (!isSupabaseConfigured()) {
+          if (adminPreview) {
+            if (!isAdminAuthenticated()) {
+              throw new Error('Preview requiere sesión admin');
+            }
+            const adminRows = await AdminApi.getDays();
+            daysData = await DataService.getAllDaysLight({
+              adminDays: DataService.mapAdminDays(adminRows),
+            });
+          } else if (!isSupabaseConfigured()) {
             throw new Error('Supabase no configurado');
+          } else {
+            const result = await DataService.loadDaysWithCache();
+            daysData = result.days;
+            fromCache = result.fromCache;
           }
-          const result = await DataService.loadDaysWithCache();
-          daysData = result.days;
-          fromCache = result.fromCache;
         } catch (dataError) {
           console.warn('⚠️ Error con Supabase:', dataError);
           const cached = await DataService.getCachedDays();
@@ -253,11 +263,12 @@ export default function App({ previewDayNumber = null }) {
 
   useEffect(() => {
     if (!galleryRef.current || todayIndex < 0) return;
-    galleryRef.current.scrollTo({
-      x: Math.max(0, todayIndex * 104 - screenWidth / 2 + 52),
+    galleryRef.current.scrollToIndex?.({
+      index: todayIndex,
       animated: true,
+      viewPosition: 0.5,
     });
-  }, [todayIndex, screenWidth, loading]);
+  }, [todayIndex, loading]);
 
   const audioButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: isPlaying ? withSpring(1.1) : withSpring(1) }],
@@ -524,69 +535,17 @@ export default function App({ previewDayNumber = null }) {
         </>
       )}
 
-      <Text style={styles.galleryTitle}>Galería de días</Text>
-
-      <ScrollView
-        ref={galleryRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        nestedScrollEnabled
-      >
-        {days.map((day, i) => {
-          const isActive = i === todayIndex;
-          const isLocked = i > effectiveTodayIndex;
-          const isViewed = viewed[String(day.dayNumber)];
-          const hasGift = day.hasGift;
-          const giftOpened = openedGifts[String(day.dayNumber)];
-
-          return (
-            <TouchableOpacity
-              key={day.dayNumber}
-              disabled={isLocked}
-              onPress={() => onPressImage(i)}
-              style={[
-                styles.thumbnailContainer,
-                isActive && styles.thumbnailActive,
-                isLocked && styles.thumbnailLocked,
-                hasGift && styles.thumbnailGift,
-              ]}
-              accessibilityLabel={`Día ${day.dayNumber}${hasGift ? ', día de regalo' : ''}${isLocked ? ', bloqueado' : ''}`}
-              accessibilityState={{ selected: isActive, disabled: isLocked }}
-            >
-              <ProgressiveImage
-                source={day?.imageUrl ? { uri: day.imageUrl } : FALLBACK_IMAGE}
-                style={styles.thumbnail}
-                imageStyle={styles.thumbnail}
-              />
-              <View style={styles.dayBadge}>
-                <Text style={styles.dayBadgeText}>{day.dayNumber}</Text>
-              </View>
-              {hasGift ? (
-                <View style={[styles.giftThumbBadge, isLocked && styles.giftThumbBadgeLocked]}>
-                  <MaterialIcons name="card-giftcard" size={14} color="#fff" />
-                </View>
-              ) : null}
-              {isViewed && !isLocked ? (
-                <View style={styles.viewedBadge}>
-                  <MaterialIcons name="check-circle" size={18} color="#4ade80" />
-                </View>
-              ) : null}
-              {hasGift && giftOpened && !isLocked ? (
-                <View style={styles.giftOpenedBadge}>
-                  <MaterialIcons name="redeem" size={16} color="#fbbf24" />
-                </View>
-              ) : null}
-              {isLocked ? (
-                <View style={styles.lockOverlay}>
-                  <MaterialIcons name="lock" size={24} color="#64748b" />
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <DayGallery
+        days={days}
+        todayIndex={todayIndex}
+        effectiveTodayIndex={effectiveTodayIndex}
+        viewed={viewed}
+        openedGifts={openedGifts}
+        onPressDay={onPressImage}
+        fallbackImage={FALLBACK_IMAGE}
+        galleryRef={galleryRef}
+        screenWidth={screenWidth}
+      />
 
       {currentDay?.hasGift ? (
         <Animated.View
