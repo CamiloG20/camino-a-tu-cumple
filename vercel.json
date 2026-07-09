@@ -6,6 +6,12 @@
   "installCommand": "npm install",
   "outputDirectory": "dist",
   "framework": null,
+  "crons": [
+    {
+      "path": "/api/cron/daily-push",
+      "schedule": "0 15 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!_expo|assets|api|sw.js|workbox|notification-sw.js|manifest.json|robots.txt|favicon.ico|favicon.png|favicon-48.png|logo180.png|logo192.png|logo512.png|metadata.json).*)",

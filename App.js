@@ -33,6 +33,12 @@ import AudioSeekBar from './components/AudioSeekBar';
 import GiftModal from './components/GiftModal';
 import FallbackBanner from './components/FallbackBanner';
 import DayGallery from './components/DayGallery';
+import DayUnlockedModal from './components/DayUnlockedModal';
+import {
+  getDayWelcomePayload,
+  markDayWelcomeShown,
+  shouldShowDayWelcome,
+} from './lib/dailyNotifications';
 import { getGiftMessage, resolveGiftMessage } from './lib/giftSchedule';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
@@ -74,6 +80,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const [giftMessage, setGiftMessage] = useState('');
   const [eventNotStarted, setEventNotStarted] = useState(false);
   const [daysUntilStart, setDaysUntilStart] = useState(0);
+  const [showDayWelcome, setShowDayWelcome] = useState(false);
+  const [welcomePayload, setWelcomePayload] = useState(null);
   const flatListRef = useRef(null);
   const galleryRef = useRef(null);
   const dayNavTokenRef = useRef(0);
@@ -255,6 +263,13 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
       cancelled = true;
     };
   }, [reloadToken, applyDayAtIndex, adminPreview, previewDayNumber]);
+
+  useEffect(() => {
+    if (loading || adminPreview || eventNotStarted) return;
+    if (!shouldShowDayWelcome()) return;
+    setWelcomePayload(getDayWelcomePayload());
+    setShowDayWelcome(true);
+  }, [loading, adminPreview, eventNotStarted, todayIndex]);
 
   useEffect(() => {
     if (loading || !currentDay?.hasGift || todayIndex !== realTodayIndex) return;
@@ -574,6 +589,21 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
         giftNumber={giftNumber}
         giftMessage={giftMessage}
         onClose={closeGiftModal}
+      />
+
+      <DayUnlockedModal
+        visible={showDayWelcome}
+        dayNumber={welcomePayload?.dayNumber}
+        daysUntil={welcomePayload?.daysUntil ?? diff}
+        isBirthday={Boolean(welcomePayload?.isBirthday)}
+        onOpen={() => {
+          markDayWelcomeShown();
+          setShowDayWelcome(false);
+        }}
+        onClose={() => {
+          markDayWelcomeShown();
+          setShowDayWelcome(false);
+        }}
       />
     </>
   );

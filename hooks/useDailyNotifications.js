@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
+import { subscribeToDailyPush, unsubscribeFromDailyPush } from '../lib/webPushClient';
 import {
   buildDailyNotificationPayload,
   DEFAULT_HOUR,
@@ -95,15 +96,27 @@ export function useDailyNotifications({ enabled: active = true } = {}) {
     const nextPrefs = { enabled: true, hour: DEFAULT_HOUR };
     saveNotificationPrefs(nextPrefs);
     setPrefs(nextPrefs);
+
+    try {
+      await subscribeToDailyPush();
+    } catch (error) {
+      console.warn('Push diario no registrado:', error.message);
+    }
+
     scheduleNextCheck();
     await runDailyCheck();
     return 'granted';
   }, [refreshPermission, runDailyCheck, scheduleNextCheck]);
 
-  const disableDailyNotifications = useCallback(() => {
+  const disableDailyNotifications = useCallback(async () => {
     const nextPrefs = { enabled: false, hour: DEFAULT_HOUR };
     saveNotificationPrefs(nextPrefs);
     setPrefs(nextPrefs);
+    try {
+      await unsubscribeFromDailyPush();
+    } catch {
+      // ignore
+    }
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;

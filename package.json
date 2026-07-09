@@ -23,7 +23,9 @@
     "fix:day1-photo": "node scripts/fix-day1-photo.mjs",
     "admin:server": "node server/admin-server.mjs",
     "dev:admin": "node server/admin-server.mjs",
-    "generate:icons": "node scripts/generate-icons.mjs"
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "generate:vapid": "node scripts/generate-vapid-keys.mjs",
+    "setup:push": "node scripts/setup-push-table.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",
@@ -54,6 +56,7 @@
     "vercel": "^54.21.0",
     "workbox-cli": "^7.3.0",
     "sharp": "^0.34.3",
+    "web-push": "^3.6.7",
     "yt-dlp-wrap": "^2.3.12"
   },
   "private": true

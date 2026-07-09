@@ -2,13 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDailyNotifications } from '../hooks/useDailyNotifications';
-import { DISMISS_BANNER_KEY } from '../lib/dailyNotifications';
+import { usePwaInstall } from '../hooks/usePwaInstall';
+import { DEFAULT_HOUR, DISMISS_BANNER_KEY } from '../lib/dailyNotifications';
+import { isPushSupported } from '../lib/webPushClient';
+
+function isIosDevice() {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
 
 export default function DailyNotificationBanner({ active = true }) {
   const { supported, permission, prefs, enableDailyNotifications, disableDailyNotifications } =
     useDailyNotifications({ enabled: active });
+  const { isStandalone } = usePwaInstall();
   const [dismissed, setDismissed] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const needsIosInstall = isIosDevice() && !isStandalone;
+  const pushReady = isPushSupported();
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return;
@@ -29,7 +40,10 @@ export default function DailyNotificationBanner({ active = true }) {
         <MaterialIcons name="notifications-active" size={22} color="#fde68a" />
         <View style={styles.textWrap}>
           <Text style={styles.title}>Recordatorio diario activo</Text>
-          <Text style={styles.body}>Te avisamos cada mañana a las 9:00 cuando haya sorpresa nueva.</Text>
+          <Text style={styles.body}>
+            Cada mañana a las {DEFAULT_HOUR}:00 te avisamos con “Día desbloqueado”.
+            {pushReady ? ' Push activo para iPhone/Android.' : ''}
+          </Text>
         </View>
         <TouchableOpacity
           onPress={disableDailyNotifications}
@@ -68,9 +82,11 @@ export default function DailyNotificationBanner({ active = true }) {
     <View style={styles.banner}>
       <MaterialIcons name="favorite" size={22} color="#fda4af" />
       <View style={styles.textWrap}>
-        <Text style={styles.title}>Recordatorio diario</Text>
+        <Text style={styles.title}>Recordatorio diario · {DEFAULT_HOUR}:00</Text>
         <Text style={styles.body}>
-          Recibe un aviso cada mañana cuando se desbloquee la sorpresa del día.
+          {needsIosInstall
+            ? 'En iPhone: primero “Añadir a pantalla de inicio”, luego activa el aviso diario.'
+            : 'Te llegará “Día desbloqueado” y al tocarlo se abre la app con tu sorpresa.'}
         </Text>
       </View>
       <TouchableOpacity
