@@ -20,7 +20,7 @@ import { DataService } from './services/dataService';
 import { AdminApi, isAdminAuthenticated } from './services/adminApi';
 import { isSupabaseConfigured } from './lib/config';
 import { getDaysUntilBirthday, getTodayDayIndex, getCalendarDateForDayNumber, formatCalendarDate, isBeforeEventStart, getDaysUntilEventStart, getEventStartDate } from './lib/calendar';
-import { BACKGROUND_OVERLAY_COLORS, BIRTHDAY_BACKGROUND_OVERLAY_COLORS, getContentWidth, safeArea } from './lib/layout';
+import { BACKGROUND_OVERLAY_COLORS, BIRTHDAY_BACKGROUND_OVERLAY_COLORS, CONTENT_MAX_WIDTH, getContentWidth, safeArea } from './lib/layout';
 import AppBackground from './components/AppBackground';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
@@ -666,6 +666,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     >
       <StatusBar style="light" />
       <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollOuter}
         showsVerticalScrollIndicator={false}
         bounces={false}
@@ -686,12 +687,17 @@ function createStyles(screenWidth) {
       width: '100%',
       alignItems: 'center',
     },
+    scrollView: {
+      flex: 1,
+      width: '100%',
+    },
     scrollOuter: {
-      flexGrow: 1,
       alignItems: 'center',
+      width: '100%',
       paddingTop: safeArea.paddingTop,
       paddingBottom: safeArea.paddingBottom,
-      paddingHorizontal: safeArea.paddingHorizontal,
+      paddingLeft: safeArea.paddingLeft,
+      paddingRight: safeArea.paddingRight,
     },
     loadingContainer: {
       flex: 1,
@@ -1055,19 +1061,23 @@ function createStyles(screenWidth) {
       alignItems: 'center',
     },
     webRoot: {
-      alignItems: 'center',
+      width: '100%',
+      maxWidth: CONTENT_MAX_WIDTH,
+      alignSelf: 'center',
     },
     preStartWrap: {
       flex: 1,
       width: '100%',
-      maxWidth: 440,
+      maxWidth: CONTENT_MAX_WIDTH,
       alignSelf: 'center',
       paddingTop: safeArea.paddingTop,
-      paddingHorizontal: safeArea.paddingHorizontal,
+      paddingBottom: safeArea.paddingBottom,
+      paddingLeft: safeArea.paddingLeft,
+      paddingRight: safeArea.paddingRight,
     },
     webInner: {
       width: '100%',
-      maxWidth: 440,
+      maxWidth: CONTENT_MAX_WIDTH,
       alignItems: 'center',
     },
   });

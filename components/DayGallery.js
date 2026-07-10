@@ -120,9 +120,11 @@ const styles = StyleSheet.create({
   scroll: {
     maxHeight: 120,
     flexGrow: 0,
+    width: '100%',
   },
   scrollContent: {
     paddingRight: 16,
+    paddingBottom: 4,
     gap: 12,
   },
   thumbnailContainer: {
