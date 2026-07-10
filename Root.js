@@ -1,11 +1,10 @@
-import React, { useEffect, useState, Suspense, lazy } from 'react';
-import { Platform, ActivityIndicator, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import App from './App';
+import AdminScreen from './screens/AdminScreen';
 import PwaUpdateBanner from './components/PwaUpdateBanner';
 import PreviewGate from './components/PreviewGate';
 import { isAdminAuthenticated } from './services/adminApi';
-
-const AdminScreen = lazy(() => import('./screens/AdminScreen'));
 
 function parsePreviewDay(hash) {
   const match = hash.match(/^#\/preview\/(\d+)/);
@@ -13,14 +12,6 @@ function parsePreviewDay(hash) {
   const day = Number(match[1]);
   if (Number.isNaN(day) || day < 0 || day > 31) return null;
   return day;
-}
-
-function AdminFallback() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator size="large" color="#6a11cb" />
-    </View>
-  );
 }
 
 function Root() {
@@ -100,9 +91,7 @@ function Root() {
     <>
       <PwaUpdateBanner visible={updateAvailable} onReload={reloadApp} />
       {isAdmin ? (
-        <Suspense fallback={<AdminFallback />}>
-          <AdminScreen />
-        </Suspense>
+        <AdminScreen />
       ) : previewBlocked && blockedDay != null ? (
         <PreviewGate dayNumber={blockedDay} onGoAdmin={goToAdmin} />
       ) : (
