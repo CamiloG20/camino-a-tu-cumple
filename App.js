@@ -661,7 +661,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   return (
     <AppBackground
       overlayColors={activeBackgroundOverlay}
-      style={[styles.container, Platform.OS === 'web' && styles.webRoot]}
+      style={styles.container}
       imageUrl={activeBackgroundUrl}
     >
       <StatusBar style="light" />
@@ -1060,16 +1060,10 @@ function createStyles(screenWidth) {
       justifyContent: 'center',
       alignItems: 'center',
     },
-    webRoot: {
-      width: '100%',
-      maxWidth: CONTENT_MAX_WIDTH,
-      alignSelf: 'center',
-    },
     preStartWrap: {
       flex: 1,
       width: '100%',
-      maxWidth: CONTENT_MAX_WIDTH,
-      alignSelf: 'center',
+      alignItems: 'center',
       paddingTop: safeArea.paddingTop,
       paddingBottom: safeArea.paddingBottom,
       paddingLeft: safeArea.paddingLeft,

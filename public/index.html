@@ -5,7 +5,7 @@
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"
     />
     <meta name="theme-color" content="#6a11cb" />
     <meta name="description" content="Cuenta regresiva con sorpresas diarias hasta tu cumpleaños" />
@@ -34,6 +34,7 @@
     <style id="expo-reset">
       html {
         height: 100%;
+        overflow-x: hidden;
         -webkit-text-size-adjust: 100%;
       }
       html,
@@ -51,6 +52,7 @@
         overscroll-behavior-y: none;
         background-color: #6a11cb;
         -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
       }
       #root {
         display: flex;
@@ -58,7 +60,6 @@
         width: 100%;
         min-height: 100dvh;
         min-height: -webkit-fill-available;
-        justify-content: center;
       }
       /* iPhone 17 Pro Max y móviles estrechos (~440pt) */
       @media only screen and (max-width: 480px) {
