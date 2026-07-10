@@ -131,7 +131,8 @@ const webStyles = {
 export default function AdminScreen() {
   const { width } = useWindowDimensions();
   const isNarrow = width < 768;
-  const styles = useMemo(() => createStyles(isNarrow), [isNarrow]);
+  const isWide = width >= 1024;
+  const styles = useMemo(() => createStyles(isNarrow, isWide), [isNarrow, isWide]);
   const [password, setPassword] = useState('');
   const [authed, setAuthed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -596,33 +597,43 @@ export default function AdminScreen() {
   return (
     <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
       <StatusBar style="light" />
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Panel Admin</Text>
-          {!isNarrow && __DEV__ ? (
-            <Text style={styles.subtitle}>API: {getAdminApiUrl()}</Text>
-          ) : null}
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.secondaryBtn}
-            onPress={() => loadDays(() => isMountedRef.current)}
-          >
-            <Text style={styles.secondaryBtnText}>Recargar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={handleLogout}>
-            <Text style={styles.secondaryBtnText}>Salir</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => { if (typeof window !== 'undefined') window.location.hash = ''; }}>
-            <Text style={styles.link}>Ver app →</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
       {loading ? (
         <ActivityIndicator color="#fff" size="large" style={{ marginTop: 40 }} />
       ) : (
-        <>
+        <ScrollView
+          style={styles.pageScroll}
+          contentContainerStyle={styles.pageScrollContent}
+          showsVerticalScrollIndicator
+        >
+          <View style={styles.pageInner}>
+            <View style={styles.header}>
+              <View style={styles.headerTitleWrap}>
+                <Text style={styles.title}>Panel Admin</Text>
+                {!isNarrow && __DEV__ ? (
+                  <Text style={styles.subtitle}>API: {getAdminApiUrl()}</Text>
+                ) : null}
+              </View>
+              <View style={styles.headerActions}>
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={() => loadDays(() => isMountedRef.current)}
+                >
+                  <Text style={styles.secondaryBtnText}>Recargar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={handleLogout}>
+                  <Text style={styles.secondaryBtnText}>Salir</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (typeof window !== 'undefined') window.location.hash = '';
+                  }}
+                >
+                  <Text style={styles.linkInline}>Ver app →</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.settingsGrid}>
           <View style={styles.settingsCard}>
             <Text style={styles.settingsTitle}>Calendario del camino</Text>
             <Text style={styles.settingsHint}>
@@ -698,28 +709,33 @@ export default function AdminScreen() {
               </TouchableOpacity>
             </View>
           </View>
+            </View>
 
-        <View style={styles.layout}>
-          <ScrollView
-            horizontal={!isNarrow}
-            style={styles.sidebar}
-            contentContainerStyle={styles.sidebarContent}
-            showsHorizontalScrollIndicator={false}
-          >
-            {days.map((day) => (
-              <TouchableOpacity
-                key={day.day_number}
-                style={[styles.dayChip, selectedDay === day.day_number && styles.dayChipActive]}
-                onPress={() => requestSelectDay(day.day_number)}
-                accessibilityRole="button"
-                accessibilityLabel={`Editar día ${day.day_number}`}
-              >
-                <Text style={styles.dayChipText}>Día {day.day_number}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+            <View style={styles.layout}>
+              <View style={styles.sidebarWrap}>
+                {!isNarrow ? <Text style={styles.sidebarTitle}>Días</Text> : null}
+                <ScrollView
+                  horizontal={isNarrow}
+                  style={styles.sidebar}
+                  contentContainerStyle={styles.sidebarContent}
+                  showsHorizontalScrollIndicator={false}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {days.map((day) => (
+                    <TouchableOpacity
+                      key={day.day_number}
+                      style={[styles.dayChip, selectedDay === day.day_number && styles.dayChipActive]}
+                      onPress={() => requestSelectDay(day.day_number)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Editar día ${day.day_number}`}
+                    >
+                      <Text style={styles.dayChipText}>Día {day.day_number}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
 
-          <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
+              <View style={styles.panel}>
             {currentDay ? (
               <>
                 {isDirty ? (
@@ -975,17 +991,31 @@ export default function AdminScreen() {
             ) : (
               <Text style={styles.subtitle}>Selecciona un día</Text>
             )}
-          </ScrollView>
-        </View>
-        </>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
       )}
     </LinearGradient>
   );
 }
 
-const createStyles = (isNarrow) =>
+const ADMIN_MAX_WIDTH = 1100;
+
+const createStyles = (isNarrow, isWide) =>
   StyleSheet.create({
-  container: { flex: 1, minHeight: '100%' },
+  container: {
+    flex: 1,
+    ...(Platform.OS === 'web' ? { minHeight: '100dvh' } : { minHeight: '100%' }),
+  },
+  pageScroll: { flex: 1, width: '100%' },
+  pageScrollContent: { flexGrow: 1, paddingBottom: 48 },
+  pageInner: {
+    width: '100%',
+    maxWidth: ADMIN_MAX_WIDTH,
+    alignSelf: 'center',
+    paddingHorizontal: isNarrow ? 16 : 24,
+  },
   blocked: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   blockedText: { color: '#fff', fontSize: 16, textAlign: 'center' },
   loginCard: {
@@ -997,26 +1027,36 @@ const createStyles = (isNarrow) =>
     paddingTop: 'max(48px, env(safe-area-inset-top, 0px))',
   },
   header: {
-    padding: 20,
-    paddingTop: 'max(48px, env(safe-area-inset-top, 0px))',
-    flexDirection: 'row',
+    paddingTop: 'max(20px, env(safe-area-inset-top, 0px))',
+    paddingBottom: 16,
+    flexDirection: isNarrow ? 'column' : 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
+    alignItems: isNarrow ? 'stretch' : 'flex-start',
     gap: 12,
   },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
+  headerTitleWrap: { flex: isNarrow ? undefined : 1 },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  settingsGrid: {
+    flexDirection: isWide ? 'row' : 'column',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
   settingsCard: {
-    marginHorizontal: 20,
-    marginBottom: 12,
+    flex: isWide ? 1 : undefined,
+    minWidth: isWide ? 280 : undefined,
+    width: isWide ? undefined : '100%',
     padding: 16,
     borderRadius: 14,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
-    maxWidth: 720,
-    alignSelf: 'center',
-    width: '100%',
   },
   settingsTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 },
   settingsHint: { color: '#cbd5e1', fontSize: 13, marginBottom: 8, lineHeight: 18 },
@@ -1047,34 +1087,53 @@ const createStyles = (isNarrow) =>
   title: { color: '#fff', fontSize: 28, fontWeight: '800' },
   subtitle: { color: '#cbd5e1', fontSize: 13, marginTop: 4 },
   layout: {
-    flex: 1,
     flexDirection: isNarrow ? 'column' : 'row',
-    minHeight: 500,
+    width: '100%',
+    gap: isNarrow ? 12 : 16,
+    alignItems: isNarrow ? 'stretch' : 'flex-start',
+  },
+  sidebarWrap: {
+    width: isNarrow ? '100%' : 168,
+    flexShrink: 0,
+  },
+  sidebarTitle: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    textTransform: 'uppercase',
   },
   sidebar: {
-    width: isNarrow ? '100%' : 140,
-    maxHeight: isNarrow ? 120 : undefined,
-    borderRightWidth: isNarrow ? 0 : 1,
-    borderBottomWidth: isNarrow ? 1 : 0,
-    borderRightColor: '#334155',
-    borderBottomColor: '#334155',
+    maxHeight: isNarrow ? 112 : undefined,
   },
   sidebarContent: {
-    padding: 12,
     gap: 8,
     flexDirection: isNarrow ? 'row' : 'column',
-    flexWrap: isNarrow ? 'nowrap' : 'wrap',
+    paddingVertical: isNarrow ? 4 : 0,
   },
   dayChip: {
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 8,
     backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    minWidth: isNarrow ? 72 : undefined,
+    alignItems: 'center',
   },
-  dayChipActive: { backgroundColor: THEME.primary },
-  dayChipText: { color: '#fff', fontWeight: '600' },
-  panel: { flex: 1 },
-  panelContent: { padding: 24, maxWidth: 720 },
+  dayChipActive: { backgroundColor: THEME.primary, borderColor: 'rgba(255,255,255,0.25)' },
+  dayChipText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  panel: {
+    flex: 1,
+    minWidth: 0,
+    width: isNarrow ? '100%' : undefined,
+    padding: isNarrow ? 16 : 24,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   panelTitle: { color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 16 },
   sectionTitle: { color: '#e2e8f0', fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 8 },
   label: { color: '#cbd5e1', fontSize: 14, marginBottom: 8, marginTop: 12 },
@@ -1176,4 +1235,5 @@ const createStyles = (isNarrow) =>
   },
   secondaryBtnText: { color: '#fff', fontSize: 13 },
   link: { color: '#93c5fd', marginTop: 16, textAlign: 'center' },
+  linkInline: { color: '#93c5fd', fontSize: 13, fontWeight: '600' },
   });
