@@ -4,7 +4,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useDailyNotifications } from '../hooks/useDailyNotifications';
 import { usePwaInstall } from '../hooks/usePwaInstall';
 import { DISMISS_BANNER_KEY } from '../lib/dailyNotifications';
-import { isPushSupported } from '../lib/webPushClient';
 
 function isIosDevice() {
   if (typeof navigator === 'undefined') return false;
@@ -16,14 +15,13 @@ function formatHourLabel(hour) {
 }
 
 export default function DailyNotificationBanner({ active = true, notificationHour = 10 }) {
-  const { supported, permission, prefs, enableDailyNotifications, disableDailyNotifications } =
+  const { supported, permission, prefs, enableDailyNotifications } =
     useDailyNotifications({ enabled: active, notificationHour });
   const { isStandalone } = usePwaInstall();
   const [dismissed, setDismissed] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const needsIosInstall = isIosDevice() && !isStandalone;
-  const pushReady = isPushSupported();
   const hourLabel = formatHourLabel(notificationHour);
 
   useEffect(() => {
@@ -39,26 +37,8 @@ export default function DailyNotificationBanner({ active = true, notificationHou
     return null;
   }
 
-  if (prefs.enabled) {
-    return (
-      <View style={styles.bannerActive}>
-        <MaterialIcons name="notifications-active" size={22} color="#fde68a" />
-        <View style={styles.textWrap}>
-          <Text style={styles.title}>Recordatorio diario activo</Text>
-          <Text style={styles.body}>
-            Cada mañana a las {hourLabel} (hora Ecuador) te avisamos con “Día desbloqueado”.
-            {pushReady ? ' Push activo para iPhone/Android.' : ''}
-          </Text>
-        </View>
-        <TouchableOpacity
-          onPress={disableDailyNotifications}
-          style={styles.secondaryBtn}
-          accessibilityLabel="Desactivar recordatorio diario"
-        >
-          <Text style={styles.secondaryText}>Off</Text>
-        </TouchableOpacity>
-      </View>
-    );
+  if (prefs.enabled && permission === 'granted') {
+    return null;
   }
 
   if (dismissed) {
@@ -125,21 +105,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 192, 203, 0.35)',
   },
-  bannerActive: {
-    width: '100%',
-    maxWidth: 440,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(15, 23, 42, 0.28)',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(253, 224, 71, 0.35)',
-  },
   textWrap: { flex: 1 },
   title: { color: '#fff', fontWeight: '700', fontSize: 14 },
   body: { color: '#e2e8f0', fontSize: 12, marginTop: 2, lineHeight: 16 },
@@ -152,14 +117,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionText: { color: '#6a11cb', fontWeight: '700', fontSize: 13 },
-  secondaryBtn: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.45)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 20,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  secondaryText: { color: '#fff', fontWeight: '600', fontSize: 12 },
 });
