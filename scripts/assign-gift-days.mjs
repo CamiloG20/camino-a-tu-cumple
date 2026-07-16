@@ -4,8 +4,9 @@ import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import {
   getScheduledGiftDayNumbers,
-  getGiftNumberForDay,
+  getSurpriseOrdinal,
   getGiftMessage,
+  GIFT_DAY_COUNT,
 } from '../lib/giftSchedule.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,7 +23,7 @@ const env = Object.fromEntries(
 const supabase = createClient(env.EXPO_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 const giftDays = getScheduledGiftDayNumbers();
 
-console.log('Días de regalo (12):', giftDays.join(', '));
+console.log(`Días de sorpresa (${GIFT_DAY_COUNT}, 1 por semana):`, giftDays.join(', '));
 console.log('');
 
 const { data: rows, error } = await supabase.from('days').select('*').order('day_number', { ascending: false });
@@ -32,18 +33,20 @@ if (error) {
 }
 
 for (const row of rows) {
-  const giftNumber = getGiftNumberForDay(row.day_number, giftDays);
-  const hasGift = giftNumber != null;
+  const ordinal = getSurpriseOrdinal(row.day_number, giftDays);
+  const hasGift = ordinal != null;
 
   const patch = {
     day_number: row.day_number,
     text: row.text ?? '',
     has_gift: hasGift,
-    gift_number: hasGift ? giftNumber : null,
-    gift_message: hasGift ? (row.gift_message || getGiftMessage(giftNumber)) : null,
+    // La categoría 1–12 la elige ella en el juego; no fijamos gift_number aquí
+    gift_number: null,
+    gift_message: hasGift ? getGiftMessage(ordinal) : null,
     image_path: row.image_path ?? null,
     audio_path: row.audio_path ?? null,
     photo_paths: row.photo_paths ?? [],
+    background_path: row.background_path ?? null,
   };
 
   const { error: upsertError } = await supabase.from('days').upsert(patch, { onConflict: 'day_number' });
@@ -53,8 +56,8 @@ for (const row of rows) {
   }
 
   if (hasGift) {
-    console.log(`✓ Día ${row.day_number} → regalo #${giftNumber}`);
+    console.log(`✓ Día ${row.day_number} → sorpresa #${ordinal} de ${GIFT_DAY_COUNT}`);
   }
 }
 
-console.log('\nListo: 12 días con regalo asignados en Supabase.');
+console.log(`\nListo: ${GIFT_DAY_COUNT} días con sorpresa asignados en Supabase.`);

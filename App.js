@@ -19,7 +19,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { DataService } from './services/dataService';
 import { AdminApi, isAdminAuthenticated } from './services/adminApi';
 import { isSupabaseConfigured } from './lib/config';
-import { getDaysUntilBirthday, getTodayDayIndex, getCalendarDateForDayNumber, formatCalendarDate, isBeforeEventStart, getDaysUntilEventStart, getEventStartDate } from './lib/calendar';
+import { getDaysUntilBirthday, getTodayDayIndexFromDays, getCalendarDateForDayNumber, formatCalendarDate, isBeforeEventStart, getDaysUntilEventStart, getEventStartDate } from './lib/calendar';
 import { BACKGROUND_OVERLAY_COLORS, BIRTHDAY_BACKGROUND_OVERLAY_COLORS, CONTENT_MAX_WIDTH, getContentWidth, safeArea } from './lib/layout';
 import AppBackground from './components/AppBackground';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
@@ -32,6 +32,7 @@ import OfflineScreen from './components/OfflineScreen';
 import EventNotStartedScreen from './components/EventNotStartedScreen';
 import AudioSeekBar from './components/AudioSeekBar';
 import GiftModal from './components/GiftModal';
+import SurprisePickGame from './components/SurprisePickGame';
 import FallbackBanner from './components/FallbackBanner';
 import DayGallery from './components/DayGallery';
 import DayUnlockedModal from './components/DayUnlockedModal';
@@ -40,7 +41,14 @@ import {
   markDayWelcomeShown,
   shouldShowDayWelcome,
 } from './lib/dailyNotifications';
-import { getGiftMessage, resolveGiftMessage } from './lib/giftSchedule';
+import { resolveGiftMessage, getSurpriseOrdinal, GIFT_DAY_COUNT } from './lib/giftSchedule';
+import { getSurpriseCategoryName } from './lib/surpriseCategories';
+import {
+  loadSurprisePicks,
+  setSurprisePick,
+  getUsedCategoryIds,
+  getPendingSurpriseDayNumbers,
+} from './lib/surprisePicks';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
 const VIEWED_KEY = 'viewedImages';
@@ -72,6 +80,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [giftNumber, setGiftNumber] = useState(null);
+  const [giftCategoryName, setGiftCategoryName] = useState('');
+  const [giftSurpriseOrdinal, setGiftSurpriseOrdinal] = useState(null);
   const [diff, setDiff] = useState(0);
   const [realTodayIndex, setRealTodayIndex] = useState(0);
   const [loadError, setLoadError] = useState(false);
@@ -80,6 +90,9 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const [reloadToken, setReloadToken] = useState(0);
   const [openedGifts, setOpenedGifts] = useState({});
   const [giftMessage, setGiftMessage] = useState('');
+  const [surprisePicks, setSurprisePicks] = useState({});
+  const [showSurpriseGame, setShowSurpriseGame] = useState(false);
+  const [surpriseGameDay, setSurpriseGameDay] = useState(null);
   const [eventNotStarted, setEventNotStarted] = useState(false);
   const [daysUntilStart, setDaysUntilStart] = useState(0);
   const [showDayWelcome, setShowDayWelcome] = useState(false);
@@ -116,16 +129,60 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     });
   }, []);
 
-  const openGiftModal = useCallback(
-    (day) => {
-      if (!day?.hasGift || day.giftNumber == null) return;
-      setGiftNumber(day.giftNumber);
+  const openGiftReveal = useCallback(
+    (day, categoryId) => {
+      if (!day?.hasGift || categoryId == null) return;
+      const ordinal = getSurpriseOrdinal(day.dayNumber);
+      setGiftNumber(categoryId);
+      setGiftCategoryName(getSurpriseCategoryName(categoryId));
+      setGiftSurpriseOrdinal(ordinal);
       setGiftMessage(resolveGiftMessage(day));
       setShowGiftModal(true);
       markGiftOpened(day.dayNumber);
     },
     [markGiftOpened]
   );
+
+  const startSurpriseGame = useCallback((day) => {
+    if (!day?.hasGift) return;
+    setSurpriseGameDay(day);
+    setShowSurpriseGame(true);
+  }, []);
+
+  const openGiftOrGame = useCallback(
+    (day, picks = surprisePicks) => {
+      if (!day?.hasGift) return;
+      const categoryId = picks[String(day.dayNumber)];
+      if (categoryId != null) {
+        openGiftReveal(day, categoryId);
+        return;
+      }
+      startSurpriseGame(day);
+    },
+    [surprisePicks, openGiftReveal, startSurpriseGame]
+  );
+
+  const handleSurprisePick = useCallback(
+    async (categoryId) => {
+      if (!surpriseGameDay) return;
+      try {
+        const next = await setSurprisePick(surpriseGameDay.dayNumber, categoryId);
+        setSurprisePicks(next);
+        setShowSurpriseGame(false);
+        const day = surpriseGameDay;
+        setSurpriseGameDay(null);
+        openGiftReveal(day, categoryId);
+      } catch (error) {
+        Alert.alert('Ups', error.message || 'No se pudo guardar tu elección');
+      }
+    },
+    [surpriseGameDay, openGiftReveal]
+  );
+
+  const closeSurpriseGame = useCallback(() => {
+    setShowSurpriseGame(false);
+    setSurpriseGameDay(null);
+  }, []);
 
   const markDayViewed = useCallback(async (dayNumber) => {
     const key = String(dayNumber);
@@ -219,7 +276,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
         const calculatedDiff = getDaysUntilBirthday();
         const beforeStart = !adminPreview && isBeforeEventStart();
-        let index = beforeStart ? -1 : getTodayDayIndex(daysData.length);
+        let index = beforeStart ? -1 : getTodayDayIndexFromDays(daysData);
 
         if (adminPreview) {
           const previewIndex = daysData.findIndex((d) => d.dayNumber === previewDayNumber);
@@ -230,10 +287,12 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
         const viewedData = await AsyncStorage.getItem(VIEWED_KEY);
         const openedData = await AsyncStorage.getItem(OPENED_GIFTS_KEY);
+        const picks = await loadSurprisePicks();
         if (cancelled) return;
 
         setViewed(parseStorageJson(viewedData));
         setOpenedGifts(parseStorageJson(openedData));
+        setSurprisePicks(picks);
         setDays(daysData);
         setDiff(calculatedDiff);
         setEventNotStarted(beforeStart);
@@ -274,10 +333,45 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   }, [loading, adminPreview, eventNotStarted, todayIndex, notificationHour]);
 
   useEffect(() => {
+    if (loading || adminPreview || eventNotStarted) return;
+    const pending = getPendingSurpriseDayNumbers(surprisePicks);
+    if (!pending.length) return;
+    if (showSurpriseGame || showGiftModal) return;
+
+    const nextDayNumber = pending[0];
+    const day = days.find((d) => d.dayNumber === nextDayNumber);
+    if (day) {
+      startSurpriseGame(day);
+    }
+  }, [
+    loading,
+    adminPreview,
+    eventNotStarted,
+    surprisePicks,
+    days,
+    showSurpriseGame,
+    showGiftModal,
+    startSurpriseGame,
+  ]);
+
+  useEffect(() => {
     if (loading || !currentDay?.hasGift || todayIndex !== realTodayIndex) return;
-    if (openedGifts[String(currentDay.dayNumber)]) return;
-    openGiftModal(currentDay);
-  }, [loading, currentDay, todayIndex, realTodayIndex, openedGifts, openGiftModal]);
+    if (openedGifts[String(currentDay.dayNumber)] && surprisePicks[String(currentDay.dayNumber)] != null) {
+      return;
+    }
+    if (showSurpriseGame || showGiftModal) return;
+    openGiftOrGame(currentDay);
+  }, [
+    loading,
+    currentDay,
+    todayIndex,
+    realTodayIndex,
+    openedGifts,
+    surprisePicks,
+    showSurpriseGame,
+    showGiftModal,
+    openGiftOrGame,
+  ]);
 
   useEffect(() => {
     if (!galleryRef.current || todayIndex < 0) return;
@@ -302,13 +396,15 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   function handleGiftPress() {
     if (currentDay?.hasGift) {
-      openGiftModal(currentDay);
+      openGiftOrGame(currentDay);
     }
   }
 
   function closeGiftModal() {
     setShowGiftModal(false);
     setGiftNumber(null);
+    setGiftCategoryName('');
+    setGiftSurpriseOrdinal(null);
     setGiftMessage('');
   }
 
@@ -574,7 +670,9 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
           style={[
             styles.giftButtonSmall,
             giftButtonStyle,
-            !openedGifts[String(currentDay.dayNumber)] && styles.giftButtonPulse,
+            !openedGifts[String(currentDay.dayNumber)] &&
+              surprisePicks[String(currentDay.dayNumber)] == null &&
+              styles.giftButtonPulse,
           ]}
         >
           <Pressable
@@ -593,7 +691,21 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
         visible={showGiftModal}
         giftNumber={giftNumber}
         giftMessage={giftMessage}
+        categoryName={giftCategoryName}
+        surpriseOrdinal={giftSurpriseOrdinal}
+        surpriseTotal={GIFT_DAY_COUNT}
         onClose={closeGiftModal}
+      />
+
+      <SurprisePickGame
+        visible={showSurpriseGame}
+        dayNumber={surpriseGameDay?.dayNumber}
+        surpriseOrdinal={
+          surpriseGameDay ? getSurpriseOrdinal(surpriseGameDay.dayNumber) : null
+        }
+        usedCategoryIds={[...getUsedCategoryIds(surprisePicks)]}
+        onPick={handleSurprisePick}
+        onClose={closeSurpriseGame}
       />
 
       <DayUnlockedModal

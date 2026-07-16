@@ -17,7 +17,8 @@ cp .env.example .env
 npm install
 npm run setup:party-bel      # Crea tabla y bucket en Supabase
 npm run setup:secure-rls     # Protege sorpresas futuras (RLS + bucket privado)
-npm run assign:gifts         # Asigna los 12 días de regalo en la BD
+npm run assign:gifts         # Asigna las 4 sorpresas semanales en la BD
+npm run setup:unlocked-days  # Corrige RPC/RLS para ver días pasados
 npm run verify:project       # Audita días, imágenes y audios
 ```
 
@@ -106,7 +107,8 @@ En `/#/admin` puedes editar por cada día: mensaje, imagen, fotos extra, audio, 
 |--------|-----|
 | `npm run verify:project` | Comprueba 32 días, imágenes, audios y regalos |
 | `npm run setup:secure-rls` | Aplica RLS + bucket privado en Supabase |
-| `npm run assign:gifts` | Escribe los 12 días de regalo |
+| `npm run assign:gifts` | Escribe las 4 sorpresas semanales |
+| `npm run setup:unlocked-days` | Incluye días pasados en RPC/RLS |
 | `npm run setup:vercel-env` | Sube env a Vercel |
 | `npm run generate:icons` | Regenera favicon e iconos PWA |
 | `npm run build:web` | Build PWA + service worker |

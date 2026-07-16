@@ -764,7 +764,9 @@ export default function AdminScreen() {
 
                 {form.has_gift && (
                   <>
-                    <Text style={styles.label}>Número de regalo</Text>
+                    <Text style={styles.label}>
+                      Número de categoría (opcional; ella elige 1–12 en el juego)
+                    </Text>
                     <TextInput
                       value={form.gift_number}
                       onChangeText={(gift_number) =>

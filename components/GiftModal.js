@@ -55,6 +55,9 @@ export default function GiftModal({
   visible,
   giftNumber,
   giftMessage,
+  categoryName,
+  surpriseOrdinal,
+  surpriseTotal = 4,
   onClose,
 }) {
   const scale = useRef(new Animated.Value(0.85)).current;
@@ -79,6 +82,9 @@ export default function GiftModal({
 
     return undefined;
   }, [visible, scale, opacity]);
+
+  const ordinalLabel =
+    surpriseOrdinal != null ? `Sorpresa ${surpriseOrdinal} de ${surpriseTotal}` : 'Regalo especial';
 
   return (
     <Modal
@@ -119,10 +125,13 @@ export default function GiftModal({
               </View>
 
               <View style={styles.giftNumberContainer}>
-                <Text style={styles.giftNumberLabel}>Regalo especial</Text>
+                <Text style={styles.giftNumberLabel}>{ordinalLabel}</Text>
                 <View style={styles.giftNumberBadge}>
                   <Text style={styles.giftNumber}>#{giftNumber}</Text>
                 </View>
+                {categoryName ? (
+                  <Text style={styles.categoryName}>{categoryName}</Text>
+                ) : null}
                 {giftMessage ? <Text style={styles.giftMessageText}>{giftMessage}</Text> : null}
               </View>
 
@@ -228,6 +237,13 @@ const styles = StyleSheet.create({
     fontSize: 42,
     fontWeight: '900',
     color: THEME.accent,
+  },
+  categoryName: {
+    marginTop: 4,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fde68a',
+    textAlign: 'center',
   },
   giftMessageText: {
     marginTop: 16,

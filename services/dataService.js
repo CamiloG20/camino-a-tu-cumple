@@ -5,7 +5,7 @@ import { resolveStorageUrl } from '../lib/mediaUrl';
 import { TOTAL_EVENT_DAYS } from '../lib/calendar';
 import { getTodayDateKey } from '../lib/timezone';
 
-const DAYS_CACHE_KEY = 'daysCache_v2';
+const DAYS_CACHE_KEY = 'daysCache_v3';
 
 const PLACEHOLDER_IMAGE =
   'https://via.placeholder.com/400x400/cccccc/ffffff?text=Imagen+no+disponible';
