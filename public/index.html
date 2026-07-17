@@ -78,17 +78,51 @@
     <script>
       window.__PWA_UPDATE_AVAILABLE__ = false;
       if ('serviceWorker' in navigator) {
+        var __pwaRefreshing = false;
+
+        // Cuando el nuevo SW toma el control, recarga forzada (sin botón Actualizar)
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (__pwaRefreshing) return;
+          __pwaRefreshing = true;
+          window.location.reload();
+        });
+
         window.addEventListener('load', function () {
           navigator.serviceWorker
             .register('/sw.js')
             .then(function (registration) {
+              function checkForUpdate() {
+                registration.update().catch(function () {});
+              }
+
+              checkForUpdate();
+              setInterval(checkForUpdate, 60 * 1000);
+
+              document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') {
+                  checkForUpdate();
+                }
+              });
+
               registration.addEventListener('updatefound', function () {
                 var worker = registration.installing;
                 if (!worker) return;
                 worker.addEventListener('statechange', function () {
+                  // Nueva versión instalada mientras había una activa → el SW
+                  // con skipWaiting tomará control y controllerchange recarga.
                   if (worker.state === 'installed' && navigator.serviceWorker.controller) {
                     window.__PWA_UPDATE_AVAILABLE__ = true;
-                    window.dispatchEvent(new Event('pwa-update-available'));
+                    // Si quedó en waiting (por si skipWaiting no aplicó), forzar activación
+                    if (registration.waiting) {
+                      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                    // Respaldo: si en ~2s no hubo controllerchange, recargar igual
+                    setTimeout(function () {
+                      if (!__pwaRefreshing) {
+                        __pwaRefreshing = true;
+                        window.location.reload();
+                      }
+                    }, 2000);
                   }
                 });
               });
