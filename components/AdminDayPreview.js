@@ -94,7 +94,7 @@ export default function AdminDayPreview({ dayNumber, form, imageUrl, photoUrls, 
           <View style={styles.giftRow}>
             <MaterialIcons name="card-giftcard" size={22} color="#fff" />
             <Text style={styles.giftRowText}>
-              Regalo #{form.gift_number || '?'}
+              Día de sorpresa (ella elige la categoría en el juego)
             </Text>
           </View>
         ) : null}

@@ -69,10 +69,16 @@ async function main() {
       await client.connect();
       await client.query(migrationSql);
       await client.query(configSql);
+      // No revertir el fix de días pasados (pasado = day_number mayor)
+      const unlockedPastSql = readFileSync(
+        resolve(root, 'supabase', 'migrations', '007_fix_unlocked_days_past.sql'),
+        'utf8'
+      );
+      await client.query(unlockedPastSql);
       await client.end();
       console.log(`\n✅ Seguridad aplicada (${host})`);
       console.log(`   Cumpleaños en BD: ${birthdayDay}/${birthdayMonth}`);
-      console.log('   • RPC get_unlocked_days activa');
+      console.log('   • RPC get_unlocked_days activa (incluye días pasados)');
       console.log('   • Bucket media privado con lectura por día desbloqueado\n');
       return;
     } catch (err) {

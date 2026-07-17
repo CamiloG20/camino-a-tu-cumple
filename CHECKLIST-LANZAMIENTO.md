@@ -49,6 +49,7 @@ Desde terminal (con `POSTGRES_PASSWORD` en `.env`):
 
 ```bash
 npm run setup:secure-rls
+npm run setup:unlocked-days   # incluye días pasados (correr después de secure-rls/timezone)
 ```
 
 Esto aplica `supabase/migrations/002_secure_rls.sql`:
@@ -72,7 +73,8 @@ Revisa:
 
 - [ ] 32 días (31 → 0)
 - [ ] Imágenes / audios donde correspondan
-- [ ] 12 días de regalo
+- [ ] 4 días de sorpresa (1 por semana; `npm run assign:gifts`)
+- [ ] `npm run setup:unlocked-days` (días pasados visibles)
 
 Si faltan regalos:
 
@@ -139,7 +141,7 @@ Marca:
 ## Paso 5 — Contenido (admin)
 
 1. Abre `/#/admin` e inicia sesión.
-2. Por cada día (prioridad **31** y **12 regalos**):
+2. Por cada día (prioridad **31** y **4 sorpresas semanales**):
    - [ ] Mensaje
    - [ ] Imagen principal (+ fotos extra)
    - [ ] Audio
@@ -159,10 +161,11 @@ npm run web
 ## Checklist final
 
 - [ ] `setup:secure-rls` ejecutado
+- [ ] `setup:unlocked-days` ejecutado (días pasados)
 - [ ] `EXPO_PUBLIC_BIRTHDAY_MONTH=8` en Vercel + redeploy
 - [ ] `verify:project` OK
 - [ ] Día 31 listo
-- [ ] 12 regalos con mensaje
+- [ ] 4 sorpresas con mensaje (categoría la elige ella en el juego)
 - [ ] Admin en producción OK
 - [ ] Preview protegido sin login
 
@@ -173,6 +176,7 @@ npm run web
 ```bash
 npm run verify:project
 npm run setup:secure-rls
+npm run setup:unlocked-days   # incluye días pasados (correr después de secure-rls/timezone)
 npm run assign:gifts
 npm run setup:vercel-env
 npm run deploy:vercel

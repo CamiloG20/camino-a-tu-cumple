@@ -21,7 +21,6 @@ import { useAdminSignedUrl, useAdminSignedUrls } from '../hooks/useAdminSignedUr
 import ProgressiveImage from '../components/ProgressiveImage';
 import AdminDayPreview from '../components/AdminDayPreview';
 import { GRADIENT_COLORS, THEME } from '../lib/layout';
-import { getGiftMessage } from '../lib/giftSchedule';
 import {
   formatCalendarDate,
   getBirthdayDate,
@@ -292,14 +291,6 @@ export default function AdminScreen() {
 
   async function persistForm(nextForm, { silent = false } = {}) {
     if (!selectedDay) return;
-
-    if (nextForm.has_gift && nextForm.gift_number) {
-      const giftNum = Number(nextForm.gift_number);
-      if (Number.isNaN(giftNum) || giftNum < 1 || giftNum > 12) {
-        Alert.alert('Error', 'El número de regalo debe estar entre 1 y 12');
-        return;
-      }
-    }
 
     try {
       setBusyAction('save');
@@ -764,24 +755,10 @@ export default function AdminScreen() {
 
                 {form.has_gift && (
                   <>
-                    <Text style={styles.label}>
-                      Número de categoría (opcional; ella elige 1–12 en el juego)
+                    <Text style={styles.settingsHint}>
+                      Ella elige la categoría (zapatos, anillo, etc.) en el minijuego de la app. Aquí
+                      solo configuras el mensaje del modal.
                     </Text>
-                    <TextInput
-                      value={form.gift_number}
-                      onChangeText={(gift_number) =>
-                        setForm((prev) => {
-                          const num = Number(gift_number);
-                          const next = { ...prev, gift_number };
-                          if (!prev.gift_message && gift_number && !Number.isNaN(num)) {
-                            next.gift_message = getGiftMessage(num);
-                          }
-                          return next;
-                        })
-                      }
-                      keyboardType="number-pad"
-                      style={styles.input}
-                    />
                     <Text style={styles.label}>Mensaje del regalo (lo que verá en el modal)</Text>
                     <TextInput
                       value={form.gift_message}

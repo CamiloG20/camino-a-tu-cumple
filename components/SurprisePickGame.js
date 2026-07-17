@@ -4,7 +4,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Pressable,
   StyleSheet,
   Animated,
   Easing,
@@ -15,21 +14,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { GRADIENT_COLORS, THEME } from '../lib/layout';
 import { SURPRISE_CATEGORIES } from '../lib/surpriseCategories';
 import { GIFT_DAY_COUNT } from '../lib/giftSchedule';
-
-const CATEGORY_EMOJI = {
-  1: '👟',
-  2: '👕',
-  3: '🧥',
-  4: '👖',
-  5: '📿',
-  6: '💍',
-  7: '✨',
-  8: '🖋️',
-  9: '🎟️',
-  10: '🍽️',
-  11: '👁️',
-  12: '💆',
-};
 
 function shuffle(list, seed = Date.now()) {
   const arr = [...list];
@@ -76,7 +60,7 @@ function CardFace({ category, revealed, taken, selected, onPress, disabled, widt
           ? `${category.name}, ya elegida`
           : revealed
             ? `Elegiste ${category.name}`
-            : `Carta misteriosa número ${category.id}`
+            : 'Carta misteriosa'
       }
       accessibilityRole="button"
     >
@@ -99,8 +83,7 @@ function CardFace({ category, revealed, taken, selected, onPress, disabled, widt
             { transform: [{ perspective: 800 }, { rotateY: backRotate }] },
           ]}
         >
-          <Text style={styles.cardEmoji}>{CATEGORY_EMOJI[category.id] || '🎁'}</Text>
-          <Text style={styles.cardNumber}>#{category.id}</Text>
+          <Text style={styles.cardEmoji}>{category.emoji || '🎁'}</Text>
           <Text style={styles.cardName} numberOfLines={2}>
             {category.name}
           </Text>
@@ -114,19 +97,23 @@ export default function SurprisePickGame({
   visible,
   dayNumber,
   surpriseOrdinal,
-  usedCategoryIds = [],
+  usedCategoryNames = [],
+  mustPick = false,
   onPick,
   onClose,
 }) {
   const { width: windowWidth } = useWindowDimensions();
-  const [pickedId, setPickedId] = useState(null);
+  const [pickedName, setPickedName] = useState(null);
   const [busy, setBusy] = useState(false);
   const celebrate = useRef(new Animated.Value(0)).current;
 
-  const usedSet = useMemo(
-    () => new Set([...(usedCategoryIds || []).map(Number)]),
-    [usedCategoryIds]
-  );
+  const usedSet = useMemo(() => {
+    const set = new Set();
+    for (const name of usedCategoryNames || []) {
+      if (name) set.add(String(name).toLowerCase());
+    }
+    return set;
+  }, [usedCategoryNames]);
 
   const deck = useMemo(() => {
     if (!visible) return SURPRISE_CATEGORIES;
@@ -137,16 +124,16 @@ export default function SurprisePickGame({
 
   useEffect(() => {
     if (!visible) {
-      setPickedId(null);
+      setPickedName(null);
       setBusy(false);
       celebrate.setValue(0);
     }
   }, [visible, celebrate]);
 
   async function handlePick(category) {
-    if (busy || pickedId != null || usedSet.has(category.id)) return;
+    if (busy || pickedName != null || usedSet.has(category.name.toLowerCase())) return;
     setBusy(true);
-    setPickedId(category.id);
+    setPickedName(category.name);
 
     Animated.sequence([
       Animated.timing(celebrate, {
@@ -157,7 +144,10 @@ export default function SurprisePickGame({
       Animated.delay(900),
     ]).start(async () => {
       try {
-        await onPick?.(category.id);
+        await onPick?.(category.name);
+      } catch {
+        setPickedName(null);
+        celebrate.setValue(0);
       } finally {
         setBusy(false);
       }
@@ -165,22 +155,22 @@ export default function SurprisePickGame({
   }
 
   const ordinalLabel = surpriseOrdinal || '?';
-  const pickedCategory = SURPRISE_CATEGORIES.find((c) => c.id === pickedId);
+  const pickedCategory = SURPRISE_CATEGORIES.find((c) => c.name === pickedName);
 
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={pickedId ? undefined : onClose}
+      onRequestClose={mustPick || pickedName ? undefined : onClose}
       accessibilityViewIsModal
     >
       <View style={styles.overlay}>
         <LinearGradient colors={GRADIENT_COLORS} style={styles.sheet}>
           <View style={styles.header}>
-            <MaterialIcons name="casino" size={28} color="#fde68a" />
-            <Text style={styles.title}>¡Elige tu sorpresa!</Text>
-            {!pickedId ? (
+            <MaterialIcons name="favorite" size={28} color="#fda4af" />
+            <Text style={styles.title}>Tu sorpresa te espera</Text>
+            {!pickedName && !mustPick ? (
               <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityLabel="Cerrar">
                 <MaterialIcons name="close" size={24} color="#fff" />
               </TouchableOpacity>
@@ -190,25 +180,25 @@ export default function SurprisePickGame({
           </View>
 
           <Text style={styles.subtitle}>
-            Sorpresa {ordinalLabel} de {GIFT_DAY_COUNT} · Día {dayNumber}
+            Momento {ordinalLabel} de {GIFT_DAY_COUNT} · con todo mi cariño
           </Text>
           <Text style={styles.hint}>
-            Hay 12 cartas. Toca una para descubrir tu regalo. Los números no se repiten.
+            Doce cartitas escondidas… toca la que más te late. Cada una guarda algo pensado para ti.
           </Text>
 
           <View style={styles.grid}>
             {deck.map((category) => {
-              const taken = usedSet.has(category.id) && pickedId !== category.id;
-              const revealed = pickedId === category.id || taken;
+              const taken = usedSet.has(category.name.toLowerCase()) && pickedName !== category.name;
+              const revealed = pickedName === category.name || taken;
               return (
                 <CardFace
-                  key={category.id}
+                  key={category.key}
                   category={category}
                   width={cardWidth}
                   taken={taken}
                   revealed={revealed}
-                  selected={pickedId === category.id}
-                  disabled={busy || pickedId != null}
+                  selected={pickedName === category.name}
+                  disabled={busy || pickedName != null}
                   onPress={() => handlePick(category)}
                 />
               );
@@ -232,9 +222,9 @@ export default function SurprisePickGame({
                 },
               ]}
             >
-              <Text style={styles.revealEmoji}>{CATEGORY_EMOJI[pickedCategory.id]}</Text>
+              <Text style={styles.revealEmoji}>{pickedCategory.emoji}</Text>
               <Text style={styles.revealText}>
-                ¡Elegiste #{pickedCategory.id} · {pickedCategory.name}!
+                ¡{pickedCategory.emoji} {pickedCategory.name}! Hecho con amor para ti.
               </Text>
             </Animated.View>
           ) : null}
@@ -341,20 +331,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   cardEmoji: {
-    fontSize: 22,
-    marginBottom: 2,
-  },
-  cardNumber: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: THEME.primary,
+    fontSize: 26,
+    marginBottom: 4,
   },
   cardName: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#334155',
     textAlign: 'center',
-    lineHeight: 12,
+    lineHeight: 13,
   },
   revealBanner: {
     marginTop: 14,
@@ -372,7 +357,7 @@ const styles = StyleSheet.create({
   revealText: {
     color: '#fff',
     fontWeight: '800',
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
   },
 });

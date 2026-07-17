@@ -54,6 +54,6 @@ set search_path = public
 as $$
   select *
   from public.days
-  where day_number <= public.max_unlocked_day_number(as_of)
+  where day_number >= public.max_unlocked_day_number(as_of)
   order by day_number desc;
 $$;

@@ -57,8 +57,15 @@ async function main() {
     try {
       await client.connect();
       await client.query(sql);
+      // Reafirmar filtro de días pasados tras recrear get_unlocked_days
+      const unlockedPastSql = readFileSync(
+        resolve(root, 'supabase', 'migrations', '007_fix_unlocked_days_past.sql'),
+        'utf8'
+      );
+      await client.query(unlockedPastSql);
       await client.end();
-      console.log(`\n✅ Zona horaria Ecuador aplicada en Supabase (${host})\n`);
+      console.log(`\n✅ Zona horaria Ecuador aplicada en Supabase (${host})`);
+      console.log('   (días pasados siguen desbloqueados)\n');
       return;
     } catch (err) {
       lastError = err;

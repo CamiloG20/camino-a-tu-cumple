@@ -111,7 +111,7 @@ set search_path = public
 as $$
   select *
   from public.days
-  where day_number <= public.max_unlocked_day_number(as_of)
+  where day_number >= public.max_unlocked_day_number(as_of)
   order by day_number desc;
 $$;
 
@@ -143,7 +143,7 @@ create policy "Public read unlocked media"
   using (
     bucket_id = 'media'
     and public.storage_day_number_from_path(name) is not null
-    and public.storage_day_number_from_path(name) <= public.max_unlocked_day_number()
+    and public.storage_day_number_from_path(name) >= public.max_unlocked_day_number()
   );
 
 create policy "Service role full media"

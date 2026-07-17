@@ -53,9 +53,8 @@ function ConfettiPiece({ emoji, style }) {
 
 export default function GiftModal({
   visible,
-  giftNumber,
-  giftMessage,
   categoryName,
+  giftMessage,
   surpriseOrdinal,
   surpriseTotal = 4,
   onClose,
@@ -127,11 +126,8 @@ export default function GiftModal({
               <View style={styles.giftNumberContainer}>
                 <Text style={styles.giftNumberLabel}>{ordinalLabel}</Text>
                 <View style={styles.giftNumberBadge}>
-                  <Text style={styles.giftNumber}>#{giftNumber}</Text>
+                  <Text style={styles.categoryName}>{categoryName || 'Sorpresa'}</Text>
                 </View>
-                {categoryName ? (
-                  <Text style={styles.categoryName}>{categoryName}</Text>
-                ) : null}
                 {giftMessage ? <Text style={styles.giftMessageText}>{giftMessage}</Text> : null}
               </View>
 
@@ -228,21 +224,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: 20,
     paddingHorizontal: 28,
-    paddingVertical: 12,
+    paddingVertical: 14,
     marginBottom: 8,
     borderWidth: 3,
     borderColor: THEME.accentSoft,
   },
-  giftNumber: {
-    fontSize: 42,
+  categoryName: {
+    fontSize: 24,
     fontWeight: '900',
     color: THEME.accent,
-  },
-  categoryName: {
-    marginTop: 4,
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#fde68a',
     textAlign: 'center',
   },
   giftMessageText: {

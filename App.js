@@ -41,18 +41,19 @@ import {
   markDayWelcomeShown,
   shouldShowDayWelcome,
 } from './lib/dailyNotifications';
-import { resolveGiftMessage, getSurpriseOrdinal, GIFT_DAY_COUNT } from './lib/giftSchedule';
+import { resolveGiftMessage, getSurpriseOrdinal, GIFT_DAY_COUNT, applyGiftScheduleToDays } from './lib/giftSchedule';
 import { getSurpriseCategoryName } from './lib/surpriseCategories';
 import {
   loadSurprisePicks,
   setSurprisePick,
-  getUsedCategoryIds,
+  getUsedCategoryNames,
   getPendingSurpriseDayNumbers,
 } from './lib/surprisePicks';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
 const VIEWED_KEY = 'viewedImages';
-const OPENED_GIFTS_KEY = 'openedGifts';
+/** v2: limpia aperturas de prueba del juego de sorpresas */
+const OPENED_GIFTS_KEY = 'openedGifts_v2';
 
 function parseStorageJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -79,7 +80,6 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const [currentDay, setCurrentDay] = useState(null);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showGiftModal, setShowGiftModal] = useState(false);
-  const [giftNumber, setGiftNumber] = useState(null);
   const [giftCategoryName, setGiftCategoryName] = useState('');
   const [giftSurpriseOrdinal, setGiftSurpriseOrdinal] = useState(null);
   const [diff, setDiff] = useState(0);
@@ -130,11 +130,10 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   }, []);
 
   const openGiftReveal = useCallback(
-    (day, categoryId) => {
-      if (!day?.hasGift || categoryId == null) return;
+    (day, categoryName) => {
+      if (!day?.hasGift || !categoryName) return;
       const ordinal = getSurpriseOrdinal(day.dayNumber);
-      setGiftNumber(categoryId);
-      setGiftCategoryName(getSurpriseCategoryName(categoryId));
+      setGiftCategoryName(getSurpriseCategoryName(categoryName) || categoryName);
       setGiftSurpriseOrdinal(ordinal);
       setGiftMessage(resolveGiftMessage(day));
       setShowGiftModal(true);
@@ -152,9 +151,9 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const openGiftOrGame = useCallback(
     (day, picks = surprisePicks) => {
       if (!day?.hasGift) return;
-      const categoryId = picks[String(day.dayNumber)];
-      if (categoryId != null) {
-        openGiftReveal(day, categoryId);
+      const categoryName = picks[String(day.dayNumber)];
+      if (categoryName) {
+        openGiftReveal(day, categoryName);
         return;
       }
       startSurpriseGame(day);
@@ -163,26 +162,38 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   );
 
   const handleSurprisePick = useCallback(
-    async (categoryId) => {
+    async (categoryName) => {
       if (!surpriseGameDay) return;
       try {
-        const next = await setSurprisePick(surpriseGameDay.dayNumber, categoryId);
+        const next = await setSurprisePick(surpriseGameDay.dayNumber, categoryName);
         setSurprisePicks(next);
         setShowSurpriseGame(false);
         const day = surpriseGameDay;
         setSurpriseGameDay(null);
-        openGiftReveal(day, categoryId);
+        openGiftReveal(day, categoryName);
       } catch (error) {
         Alert.alert('Ups', error.message || 'No se pudo guardar tu elección');
+        throw error;
       }
     },
     [surpriseGameDay, openGiftReveal]
   );
 
   const closeSurpriseGame = useCallback(() => {
+    const pending = getPendingSurpriseDayNumbers(surprisePicks);
+    // No dejar cerrar si hay sorpresa pendiente por elegir
+    if (pending.length && surpriseGameDay && pending.includes(surpriseGameDay.dayNumber)) {
+      return;
+    }
     setShowSurpriseGame(false);
     setSurpriseGameDay(null);
-  }, []);
+  }, [surprisePicks, surpriseGameDay]);
+
+  const mustPickSurprise = useMemo(() => {
+    if (!surpriseGameDay) return false;
+    const pending = getPendingSurpriseDayNumbers(surprisePicks);
+    return pending.includes(surpriseGameDay.dayNumber);
+  }, [surpriseGameDay, surprisePicks]);
 
   const markDayViewed = useCallback(async (dayNumber) => {
     const key = String(dayNumber);
@@ -274,6 +285,11 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
         if (cancelled) return;
 
+        // Alinear hasGift con el schedule de 4 sorpresas (respaldo si BD se desincroniza)
+        if (!adminPreview) {
+          daysData = applyGiftScheduleToDays(daysData);
+        }
+
         const calculatedDiff = getDaysUntilBirthday();
         const beforeStart = !adminPreview && isBeforeEventStart();
         let index = beforeStart ? -1 : getTodayDayIndexFromDays(daysData);
@@ -327,49 +343,44 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   useEffect(() => {
     if (loading || adminPreview || eventNotStarted) return;
-    if (!shouldShowDayWelcome(new Date(), notificationHour)) return;
-    setWelcomePayload(getDayWelcomePayload());
-    setShowDayWelcome(true);
-  }, [loading, adminPreview, eventNotStarted, todayIndex, notificationHour]);
+    // Una sola cola: bienvenida → sorpresa pendiente → regalo de hoy
+    if (showDayWelcome || showSurpriseGame || showGiftModal) return;
 
-  useEffect(() => {
-    if (loading || adminPreview || eventNotStarted) return;
-    const pending = getPendingSurpriseDayNumbers(surprisePicks);
-    if (!pending.length) return;
-    if (showSurpriseGame || showGiftModal) return;
-
-    const nextDayNumber = pending[0];
-    const day = days.find((d) => d.dayNumber === nextDayNumber);
-    if (day) {
-      startSurpriseGame(day);
+    if (shouldShowDayWelcome(new Date(), notificationHour)) {
+      setWelcomePayload(getDayWelcomePayload());
+      setShowDayWelcome(true);
+      return;
     }
+
+    const pending = getPendingSurpriseDayNumbers(surprisePicks);
+    if (pending.length) {
+      const day = days.find((d) => d.dayNumber === pending[0]);
+      if (day?.hasGift) {
+        startSurpriseGame(day);
+        return;
+      }
+    }
+
+    if (!currentDay?.hasGift || todayIndex !== realTodayIndex) return;
+    if (openedGifts[String(currentDay.dayNumber)] && surprisePicks[String(currentDay.dayNumber)]) {
+      return;
+    }
+    openGiftOrGame(currentDay);
   }, [
     loading,
     adminPreview,
     eventNotStarted,
-    surprisePicks,
-    days,
+    showDayWelcome,
     showSurpriseGame,
     showGiftModal,
-    startSurpriseGame,
-  ]);
-
-  useEffect(() => {
-    if (loading || !currentDay?.hasGift || todayIndex !== realTodayIndex) return;
-    if (openedGifts[String(currentDay.dayNumber)] && surprisePicks[String(currentDay.dayNumber)] != null) {
-      return;
-    }
-    if (showSurpriseGame || showGiftModal) return;
-    openGiftOrGame(currentDay);
-  }, [
-    loading,
+    notificationHour,
+    surprisePicks,
+    days,
     currentDay,
     todayIndex,
     realTodayIndex,
     openedGifts,
-    surprisePicks,
-    showSurpriseGame,
-    showGiftModal,
+    startSurpriseGame,
     openGiftOrGame,
   ]);
 
@@ -402,7 +413,6 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   function closeGiftModal() {
     setShowGiftModal(false);
-    setGiftNumber(null);
     setGiftCategoryName('');
     setGiftSurpriseOrdinal(null);
     setGiftMessage('');
@@ -689,9 +699,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
       <GiftModal
         visible={showGiftModal}
-        giftNumber={giftNumber}
-        giftMessage={giftMessage}
         categoryName={giftCategoryName}
+        giftMessage={giftMessage}
         surpriseOrdinal={giftSurpriseOrdinal}
         surpriseTotal={GIFT_DAY_COUNT}
         onClose={closeGiftModal}
@@ -703,7 +712,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
         surpriseOrdinal={
           surpriseGameDay ? getSurpriseOrdinal(surpriseGameDay.dayNumber) : null
         }
-        usedCategoryIds={[...getUsedCategoryIds(surprisePicks)]}
+        usedCategoryNames={[...getUsedCategoryNames(surprisePicks)]}
+        mustPick={mustPickSurprise}
         onPick={handleSurprisePick}
         onClose={closeSurpriseGame}
       />
