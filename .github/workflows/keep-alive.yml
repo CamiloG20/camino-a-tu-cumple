@@ -1,11 +1,9 @@
 name: Keep Supabase awake
 
 # Evita que Party-Bel_Amour (tivquhixdeutjlndafcm) se pause por inactividad.
-# También intenta el push diario cada hora (respeta la hora Ecuador del admin).
-#
-# Configura el secret CRON_SECRET en GitHub (mismo valor que en Vercel)
-# para que daily-push / keep-alive autorizados funcionen.
-# El health?ping=1 mantiene vivo Supabase aunque falte el secret.
+# 1) Ping directo a Supabase (anon key en secret SUPABASE_ANON_KEY)
+# 2) Ping a /api/health?ping=1 en Vercel (cuando el deploy esté Ready)
+# 3) Opcional: CRON_SECRET para daily-push / keep-alive de Vercel
 
 on:
   schedule:
@@ -17,29 +15,58 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping producción y Supabase
+      - name: Ping Supabase y producción
         env:
           APP_URL: https://camino-a-tu-cumple.vercel.app
+          SUPABASE_URL: https://tivquhixdeutjlndafcm.supabase.co
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -u
-          echo "→ health?ping=1 (keep-alive mínimo)"
-          curl -fsS "${APP_URL}/api/health?ping=1"
+          TODAY="$(date -u +%F)"
+
+          if [ -n "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "→ ping directo Supabase RPC get_unlocked_days ($TODAY)"
+            curl -fsS \
+              -H "apikey: ${SUPABASE_ANON_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "{\"as_of\":\"${TODAY}\"}" \
+              "${SUPABASE_URL}/rest/v1/rpc/get_unlocked_days" \
+              | head -c 200
+            echo
+            echo "→ ping REST days (actividad extra)"
+            curl -fsS \
+              -H "apikey: ${SUPABASE_ANON_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+              "${SUPABASE_URL}/rest/v1/days?select=id&limit=1" \
+              | head -c 120
+            echo
+          else
+            echo "⚠️ Falta secret SUPABASE_ANON_KEY en GitHub (Settings → Secrets)."
+            echo "   Sin él el keep-alive no garantiza despertar el proyecto."
+          fi
+
+          echo "→ health?ping=1"
+          curl -sS -o /tmp/health.json -w "HTTP %{http_code}\n" "${APP_URL}/api/health?ping=1" || true
+          cat /tmp/health.json 2>/dev/null || true
           echo
 
           if [ -z "${CRON_SECRET:-}" ]; then
-            echo "⚠️ CRON_SECRET no configurado en GitHub Secrets."
-            echo "   El ping a /api/health ya toca Supabase."
-            echo "   Añade CRON_SECRET para daily-push horario."
+            echo "ℹ️ CRON_SECRET no configurado (opcional para daily-push)."
             exit 0
           fi
 
-          echo "→ keep-alive cron"
-          curl -fsS -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${APP_URL}/api/cron/keep-alive"
+          echo "→ keep-alive cron Vercel"
+          curl -sS -o /tmp/ka.json -w "HTTP %{http_code}\n" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/keep-alive" || true
+          cat /tmp/ka.json 2>/dev/null | head -c 300 || true
           echo
 
-          echo "→ daily-push (skipped si no es la hora del aviso)"
-          curl -fsS -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${APP_URL}/api/cron/daily-push"
+          echo "→ daily-push"
+          curl -sS -o /tmp/push.json -w "HTTP %{http_code}\n" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/daily-push" || true
+          cat /tmp/push.json 2>/dev/null | head -c 300 || true
           echo

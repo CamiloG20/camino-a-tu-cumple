@@ -57,11 +57,13 @@ El proyecto free **Party-Bel_Amour** (`tivquhixdeutjlndafcm`) puede pausarse si 
 
 Para mantenerlo despierto:
 
-1. Workflow de GitHub **Keep Supabase awake** (cada hora) → pega `health?ping=1`.
-2. Cron diario de Vercel → `/api/cron/keep-alive`.
-3. Opcional: añade el secret `CRON_SECRET` en GitHub (mismo valor que en Vercel) para que el workflow también dispare el push diario a la hora configurada en admin.
+1. Workflow de GitHub **Keep Supabase awake** (cada hora) → ping **directo** a Supabase con el secret `SUPABASE_ANON_KEY` + `health?ping=1`.
+2. Cron diario de Vercel → `/api/cron/daily-push` (también toca la BD al consultar la hora del aviso).
+3. Opcional: secret `CRON_SECRET` en GitHub (mismo valor que en Vercel) para disparar el push diario desde Actions.
 
-Si ya te llegó el aviso de pausa: abre el dashboard de Supabase y confirma que el proyecto sigue **Active**, o pulsa Unpause si ya se pausó. Luego haz push de estos cambios para que el keep-alive quede activo.
+Si ya te llegó el aviso de pausa: abre el dashboard de Supabase y confirma que el proyecto sigue **Active**, o pulsa Unpause si ya se pausó.
+
+> Nota: el plan Hobby de Vercel permite máx. 12 serverless functions; el keep-alive vive en GitHub Actions (no como función extra).
 
 ---
 
