@@ -1,7 +1,21 @@
+/**
+ * Rate limit en memoria por instancia.
+ * En Vercel no es global entre lambdas; sirve como freno básico.
+ * Para límite fuerte en auth/push, combinar con CRON_SECRET y secretos de app.
+ */
 const buckets = new Map();
+
+const MAX_KEYS = 5000;
 
 export function checkRateLimit(key, { maxAttempts = 5, windowMs = 15 * 60 * 1000 } = {}) {
   const now = Date.now();
+
+  if (buckets.size > MAX_KEYS) {
+    for (const [k, entry] of buckets) {
+      if (now - entry.start > windowMs) buckets.delete(k);
+    }
+  }
+
   const entry = buckets.get(key);
 
   if (!entry || now - entry.start > windowMs) {

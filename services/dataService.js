@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'react-native';
 import { getSupabase } from '../lib/supabase';
 import { isSupabaseConfigured } from '../lib/config';
 import { resolveStorageUrl } from '../lib/mediaUrl';
@@ -8,7 +9,7 @@ import { getTodayDateKey } from '../lib/timezone';
 const DAYS_CACHE_KEY = 'daysCache_v3';
 
 const PLACEHOLDER_IMAGE =
-  'https://via.placeholder.com/400x400/cccccc/ffffff?text=Imagen+no+disponible';
+  Image.resolveAssetSource(require('../assets/images/fondo.png'))?.uri || '';
 
 function mapDayRow(row) {
   return {
@@ -49,7 +50,7 @@ async function getDayPhotos(day) {
     extraUrls.forEach(addPhoto);
   }
 
-  if (!photos.length) {
+  if (!photos.length && PLACEHOLDER_IMAGE) {
     photos.push(PLACEHOLDER_IMAGE);
   }
 
@@ -67,7 +68,7 @@ async function lightEnrichDay(day) {
     imageUrl,
     backgroundUrl,
     audioUrl: null,
-    photos: [imageUrl],
+    photos: imageUrl ? [imageUrl] : [],
     enriched: false,
   };
 }
@@ -96,14 +97,7 @@ export class DataService {
     });
 
     if (error) {
-      if (error.code === 'PGRST202' || /get_unlocked_days/i.test(error.message || '')) {
-        const fallback = await supabase
-          .from('days')
-          .select('*')
-          .order('day_number', { ascending: false });
-        if (fallback.error) throw fallback.error;
-        return (fallback.data ?? []).map(mapDayRow);
-      }
+      // No fallback a select *: expondría días futuros si RLS no está aplicado.
       throw error;
     }
 
@@ -181,29 +175,30 @@ export class DataService {
       throw new Error('Datos de demostración no disponibles en producción');
     }
 
+    const img = PLACEHOLDER_IMAGE;
     return [
       {
         dayNumber: 31,
         text: '¡Comienza la cuenta regresiva hacia tu cumpleaños! Cada día será una nueva sorpresa.',
-        imageUrl: 'https://via.placeholder.com/400x400/ff6b6b/ffffff?text=D%C3%ADa+31',
+        imageUrl: img,
         audioUrl: null,
-        photos: ['https://via.placeholder.com/400x400/ff6b6b/ffffff?text=D%C3%ADa+31'],
+        photos: img ? [img] : [],
         enriched: true,
       },
       {
         dayNumber: 30,
         text: 'Hoy es el primer día de nuestro camino hacia tu cumpleaños.',
-        imageUrl: 'https://via.placeholder.com/400x400/6a11cb/ffffff?text=D%C3%ADa+30',
+        imageUrl: img,
         audioUrl: null,
-        photos: ['https://via.placeholder.com/400x400/6a11cb/ffffff?text=D%C3%ADa+30'],
+        photos: img ? [img] : [],
         enriched: true,
       },
       {
         dayNumber: 29,
         text: 'El segundo día nos trae nuevas emociones y recuerdos que compartir.',
-        imageUrl: 'https://via.placeholder.com/400x400/2575fc/ffffff?text=D%C3%ADa+29',
+        imageUrl: img,
         audioUrl: null,
-        photos: ['https://via.placeholder.com/400x400/2575fc/ffffff?text=D%C3%ADa+29'],
+        photos: img ? [img] : [],
         enriched: true,
       },
     ];

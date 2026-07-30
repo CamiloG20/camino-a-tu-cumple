@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { parseJsonBody } from '../_lib/parseBody.js';
+import { checkRateLimit, getClientIp } from '../_lib/rateLimit.js';
 
 function getSupabase() {
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
@@ -15,9 +16,24 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
+  const ip = getClientIp(req);
+  const limit = checkRateLimit(`push-subscribe:${ip}`, {
+    maxAttempts: 20,
+    windowMs: 15 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return res.status(429).json({
+      error: 'Demasiadas suscripciones. Espera unos minutos e inténtalo de nuevo.',
+    });
+  }
+
   const body = parseJsonBody(req);
-  if (!body?.endpoint) {
+  if (!body?.endpoint || typeof body.endpoint !== 'string') {
     return res.status(400).json({ error: 'Suscripción inválida' });
+  }
+
+  if (body.endpoint.length > 2048) {
+    return res.status(400).json({ error: 'Endpoint demasiado largo' });
   }
 
   try {

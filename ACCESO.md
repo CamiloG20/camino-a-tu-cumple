@@ -46,7 +46,22 @@ Referencia rápida para abrir la app, el panel admin y los enlaces útiles.
 | Endpoint | URL |
 |----------|-----|
 | Health check | https://camino-a-tu-cumple.vercel.app/api/health |
+| Health + ping Supabase | https://camino-a-tu-cumple.vercel.app/api/health?ping=1 |
 | Config pública (hora aviso, fondo) | https://camino-a-tu-cumple.vercel.app/api/app-config |
+
+---
+
+## Supabase (evitar pausa por inactividad)
+
+El proyecto free **Party-Bel_Amour** (`tivquhixdeutjlndafcm`) puede pausarse si no hay actividad ~7 días.
+
+Para mantenerlo despierto:
+
+1. Workflow de GitHub **Keep Supabase awake** (cada hora) → pega `health?ping=1`.
+2. Cron diario de Vercel → `/api/cron/keep-alive`.
+3. Opcional: añade el secret `CRON_SECRET` en GitHub (mismo valor que en Vercel) para que el workflow también dispare el push diario a la hora configurada en admin.
+
+Si ya te llegó el aviso de pausa: abre el dashboard de Supabase y confirma que el proyecto sigue **Active**, o pulsa Unpause si ya se pausó. Luego haz push de estos cambios para que el keep-alive quede activo.
 
 ---
 
@@ -84,5 +99,6 @@ Contraseña local: `ADMIN_PASSWORD` en tu archivo `.env`.
 ## Notas
 
 - **No compartas** la contraseña admin ni el archivo `.env`.
+- La **anon key** de Supabase va en `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Vercel + local). Es pública en el cliente, pero no la pegues en chats ni issues.
 - La app de ella **no lleva** login; solo el admin está protegido.
 - Si cambias variables en Vercel, haz **redeploy** para que surtan efecto en producción.

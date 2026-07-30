@@ -35,6 +35,7 @@ export function useAudioPlayer(audioUrl) {
     setIsPlaying(false);
     setAudioPosition(0);
     setAudioDuration(0);
+    if (typeof window !== 'undefined') window.__PWA_AUDIO_PLAYING__ = false;
   }, []);
 
   const attachPlaybackListener = useCallback((sound) => {
@@ -52,10 +53,14 @@ export function useAudioPlayer(audioUrl) {
       if (!status.isPlaying && status.didJustFinish) {
         setIsPlaying(false);
         setAudioPosition(0);
+        if (typeof window !== 'undefined') window.__PWA_AUDIO_PLAYING__ = false;
         return;
       }
 
       setIsPlaying(status.isPlaying);
+      if (typeof window !== 'undefined') {
+        window.__PWA_AUDIO_PLAYING__ = Boolean(status.isPlaying);
+      }
     });
   }, []);
 

@@ -44,3 +44,6 @@ dist/
 
 # typescript
 *.tsbuildinfo
+
+# Audio comercial: no versionar (usar Supabase Storage)
+assets/sounds/*.mp3

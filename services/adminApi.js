@@ -1,4 +1,5 @@
 import { getAdminApiUrl } from '../lib/config';
+import { isAdminTokenUnexpired } from '../lib/adminTokenClient';
 
 const TOKEN_KEY = 'admin_token';
 const LEGACY_PASSWORD_KEY = 'admin_password';
@@ -21,7 +22,13 @@ export function clearStoredAdminToken() {
 }
 
 export function isAdminAuthenticated() {
-  return Boolean(getStoredAdminToken());
+  const token = getStoredAdminToken();
+  if (!token) return false;
+  if (!isAdminTokenUnexpired(token)) {
+    clearStoredAdminToken();
+    return false;
+  }
+  return true;
 }
 
 async function adminFetch(path, options = {}) {

@@ -6,6 +6,7 @@ import {
 } from '../_lib/admin.js';
 import { parseJsonBody } from '../_lib/parseBody.js';
 import { checkRateLimit, getClientIp } from '../_lib/rateLimit.js';
+import { timingSafeEqualString } from '../../lib/safeCompare.js';
 
 export default function handler(req, res) {
   setCors(res, req);
@@ -33,7 +34,7 @@ export default function handler(req, res) {
     return res.status(400).json({ error: 'JSON inválido' });
   }
 
-  if (body.password !== password) {
+  if (!timingSafeEqualString(body.password, password)) {
     return res.status(401).json({ error: 'Contraseña incorrecta' });
   }
 

@@ -5,9 +5,9 @@
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#6a11cb" />
+    <meta name="theme-color" content="#0f2c2e" />
     <meta name="description" content="Cuenta regresiva con sorpresas diarias hasta tu cumpleaños" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -19,7 +19,7 @@
     <meta property="og:description" content="Cuenta regresiva con sorpresas diarias hasta tu cumpleaños" />
     <meta property="og:image" content="https://camino-a-tu-cumple.vercel.app/logo512.png?v=2" />
     <meta name="twitter:image" content="https://camino-a-tu-cumple.vercel.app/logo512.png?v=2" />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Camino a tu cumple" />
     <meta name="twitter:description" content="Cuenta regresiva con sorpresas diarias hasta tu cumpleaños" />
@@ -28,8 +28,13 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png?v=2" />
     <link rel="icon" type="image/png" sizes="192x192" href="/logo192.png?v=2" />
     <link rel="shortcut icon" href="/favicon.ico?v=2" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://tivquhixdeutjlndafcm.supabase.co" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
     <title>Camino a tu cumple</title>
     <style id="expo-reset">
       html {
@@ -50,9 +55,10 @@
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior-y: none;
-        background-color: #6a11cb;
+        background-color: #0f2c2e;
         -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
+        font-family: "Source Sans 3", "Source Sans Pro", system-ui, sans-serif;
       }
       #root {
         display: flex;
@@ -77,14 +83,34 @@
     <div id="root"></div>
     <script>
       window.__PWA_UPDATE_AVAILABLE__ = false;
+      window.__PWA_AUDIO_PLAYING__ = false;
       if ('serviceWorker' in navigator) {
         var __pwaRefreshing = false;
 
-        // Cuando el nuevo SW toma el control, recarga forzada (sin botón Actualizar)
-        navigator.serviceWorker.addEventListener('controllerchange', function () {
+        function isAudioPlaying() {
+          if (window.__PWA_AUDIO_PLAYING__) return true;
+          try {
+            var medias = document.querySelectorAll('audio, video');
+            for (var i = 0; i < medias.length; i++) {
+              if (!medias[i].paused && !medias[i].ended) return true;
+            }
+          } catch (e) {}
+          return false;
+        }
+
+        function reloadWhenSafe() {
           if (__pwaRefreshing) return;
+          if (isAudioPlaying()) {
+            setTimeout(reloadWhenSafe, 3000);
+            return;
+          }
           __pwaRefreshing = true;
           window.location.reload();
+        }
+
+        // Cuando el nuevo SW toma el control, recarga forzada (sin botón Actualizar)
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          reloadWhenSafe();
         });
 
         window.addEventListener('load', function () {
@@ -116,11 +142,10 @@
                     if (registration.waiting) {
                       registration.waiting.postMessage({ type: 'SKIP_WAITING' });
                     }
-                    // Respaldo: si en ~2s no hubo controllerchange, recargar igual
+                    // Respaldo: si en ~2s no hubo controllerchange, recargar igual (si no hay audio)
                     setTimeout(function () {
                       if (!__pwaRefreshing) {
-                        __pwaRefreshing = true;
-                        window.location.reload();
+                        reloadWhenSafe();
                       }
                     }, 2000);
                   }

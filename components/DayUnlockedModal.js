@@ -18,7 +18,7 @@ export default function DayUnlockedModal({ visible, dayNumber, daysUntil, isBirt
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <LinearGradient colors={['#6a11cb', '#2575fc']} style={styles.card}>
+        <LinearGradient colors={GRADIENT_COLORS} style={styles.card}>
           <View style={styles.iconRing}>
             <MaterialIcons name="favorite" size={42} color="#fff" />
           </View>
@@ -27,7 +27,7 @@ export default function DayUnlockedModal({ visible, dayNumber, daysUntil, isBirt
           <Text style={styles.subtitle}>{subtitle}</Text>
 
           <TouchableOpacity style={styles.primaryBtn} onPress={onOpen} accessibilityRole="button">
-            <MaterialIcons name="card-giftcard" size={20} color="#6a11cb" />
+            <MaterialIcons name="card-giftcard" size={20} color="#0f2c2e" />
             <Text style={styles.primaryText}>Abrir mi sorpresa</Text>
           </TouchableOpacity>
 
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryText: {
-    color: '#6a11cb',
+    color: '#0f2c2e',
     fontSize: 16,
     fontWeight: '800',
   },

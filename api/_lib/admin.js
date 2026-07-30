@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createAdminToken, verifyAdminToken } from '../../lib/adminToken.js';
 import { sanitizeStorageKey } from '../../lib/storageSanitize.js';
 import { PRODUCTION_URL } from '../../lib/site.js';
+import { timingSafeEqualString } from '../../lib/safeCompare.js';
 import { checkRateLimit, getClientIp } from './rateLimit.js';
 
 export { sanitizeStorageKey, createAdminToken, verifyAdminToken };
@@ -102,7 +103,7 @@ export function isAdminAuthorized(req) {
 
   const password = getAdminPassword();
   if (!password) return false;
-  return req.headers['x-admin-password'] === password;
+  return timingSafeEqualString(req.headers['x-admin-password'], password);
 }
 
 export function requireAdmin(req, res, { rateLimitKey = 'admin' } = {}) {

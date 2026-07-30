@@ -50,5 +50,5 @@ const styles = StyleSheet.create({
     minHeight: 48,
     justifyContent: 'center',
   },
-  btnText: { color: '#6a11cb', fontWeight: '800', fontSize: 16 },
+  btnText: { color: '#0f2c2e', fontWeight: '800', fontSize: 16 },
 });

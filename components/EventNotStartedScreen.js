@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   FadeInDown,
   FadeInUp,
@@ -12,34 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { MaterialIcons } from '@expo/vector-icons';
 import { formatCalendarDate } from '../lib/calendar';
-import { safeArea, THEME } from '../lib/layout';
-
-const FLOATING = ['✨', '💜', '🎂', '⭐', '💫'];
-
-function FloatingEmoji({ emoji, style, delay = 0 }) {
-  const translateY = useSharedValue(0);
-
-  useEffect(() => {
-    translateY.value = withRepeat(
-      withSequence(
-        withTiming(-10, { duration: 2200 + delay, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 2200 + delay, easing: Easing.inOut(Easing.sin) })
-      ),
-      -1,
-      true
-    );
-  }, [delay, translateY]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  return (
-    <Animated.Text style={[styles.floatingEmoji, style, animatedStyle]}>
-      {emoji}
-    </Animated.Text>
-  );
-}
+import { FONTS, safeArea, THEME } from '../lib/layout';
 
 function getCountdownCopy(daysUntilStart) {
   if (daysUntilStart === 1) {
@@ -82,26 +55,17 @@ export default function EventNotStartedScreen({ daysUntilStart, startDate }) {
 
   return (
     <View style={styles.wrap} accessibilityRole="text">
-      <View style={styles.floatingRow} pointerEvents="none">
-        {FLOATING.map((emoji, index) => (
-          <FloatingEmoji
-            key={emoji}
-            emoji={emoji}
-            delay={index * 180}
-            style={{ left: `${6 + index * 18}%` }}
-          />
-        ))}
-      </View>
-
       <Animated.View entering={FadeInDown.duration(500).springify()} style={styles.card}>
         <Animated.View style={[styles.iconCircle, heartStyle]}>
           <MaterialIcons name="favorite" size={36} color={THEME.accent} />
         </Animated.View>
 
-        <Text style={styles.eyebrow}>Camino a tu cumple</Text>
+        <Text style={styles.eyebrow} accessibilityRole="header">
+          Camino a tu cumple
+        </Text>
         <Text style={styles.title}>Algo muy bonito se acerca</Text>
 
-        <View style={styles.countdownBox}>
+        <View style={styles.countdownBox} accessibilityLabel={`Faltan ${daysUntilStart} días`}>
           <Text style={styles.countdownNumber}>{daysUntilStart}</Text>
           <Text style={styles.countdownLabel}>
             {daysUntilStart === 1 ? 'día' : 'días'}
@@ -111,11 +75,9 @@ export default function EventNotStartedScreen({ daysUntilStart, startDate }) {
         <Text style={styles.headline}>{headline}</Text>
         <Text style={styles.subline}>{subline}</Text>
 
-        <View style={styles.datePill}>
+        <View style={styles.dateRow}>
           <MaterialIcons name="event" size={18} color={THEME.primary} />
-          <Text style={styles.datePillText}>
-            Inicio: {startLabel} · Día 31
-          </Text>
+          <Text style={styles.dateText}>Inicio: {startLabel} · Día 31</Text>
         </View>
 
         <View style={styles.divider} />
@@ -126,7 +88,7 @@ export default function EventNotStartedScreen({ daysUntilStart, startDate }) {
       </Animated.View>
 
       <Animated.Text entering={FadeInUp.delay(400).duration(600)} style={styles.footer}>
-        Hecho con amor, solo para ti 💝
+        Hecho con amor, solo para ti
       </Animated.Text>
     </View>
   );
@@ -144,60 +106,44 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  floatingRow: {
-    position: 'absolute',
-    top: '12%',
-    left: 0,
-    right: 0,
-    height: 48,
-    zIndex: 0,
-  },
-  floatingEmoji: {
-    position: 'absolute',
-    fontSize: 22,
-    opacity: 0.85,
-  },
   card: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.97)',
-    borderRadius: 28,
-    paddingVertical: 32,
-    paddingHorizontal: 26,
+    backgroundColor: 'rgba(255,248,246,0.97)',
+    borderRadius: 4,
+    paddingVertical: 36,
+    paddingHorizontal: 28,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.8)',
+    borderColor: 'rgba(196, 92, 106, 0.22)',
   },
   iconCircle: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#fff0f3',
+    backgroundColor: 'rgba(196, 92, 106, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#fecdd3',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 92, 106, 0.28)',
   },
   eyebrow: {
     color: THEME.primary,
     fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 8,
+    fontFamily: FONTS.body,
   },
   title: {
-    color: '#1e1b4b',
-    fontSize: 24,
-    fontWeight: '800',
+    color: THEME.primary,
+    fontSize: 28,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 30,
+    marginBottom: 22,
+    lineHeight: 34,
+    fontFamily: FONTS.display,
   },
   countdownBox: {
     flexDirection: 'row',
@@ -208,63 +154,63 @@ const styles = StyleSheet.create({
   },
   countdownNumber: {
     fontSize: 64,
-    fontWeight: '900',
-    color: THEME.primary,
+    fontWeight: '700',
+    color: THEME.secondary,
     lineHeight: 64,
     fontVariant: ['tabular-nums'],
+    fontFamily: FONTS.display,
   },
   countdownLabel: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#64748b',
+    color: '#6b5e5e',
     marginBottom: 10,
+    fontFamily: FONTS.body,
   },
   headline: {
-    color: '#334155',
+    color: '#3d3333',
     fontSize: 17,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 6,
+    fontFamily: FONTS.body,
   },
   subline: {
-    color: '#64748b',
+    color: '#6b5e5e',
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 18,
     paddingHorizontal: 4,
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : undefined,
+    fontFamily: FONTS.display,
     fontStyle: 'italic',
   },
-  datePill: {
+  dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#f5f3ff',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e9d5ff',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
-  datePillText: {
+  dateText: {
     color: THEME.primary,
     fontSize: 14,
     fontWeight: '700',
+    fontFamily: FONTS.body,
   },
   divider: {
     width: 48,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: '#e2e8f0',
+    height: 2,
+    backgroundColor: 'rgba(15, 44, 46, 0.15)',
     marginVertical: 18,
   },
   hint: {
-    color: '#94a3b8',
+    color: '#8a7a7a',
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 8,
+    fontFamily: FONTS.body,
   },
   footer: {
     marginTop: 24,
@@ -275,5 +221,6 @@ const styles = StyleSheet.create({
     textShadowColor: '#00000044',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
+    fontFamily: FONTS.body,
   },
 });

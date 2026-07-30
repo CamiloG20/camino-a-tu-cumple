@@ -1,0 +1,45 @@
+name: Keep Supabase awake
+
+# Evita que Party-Bel_Amour (tivquhixdeutjlndafcm) se pause por inactividad.
+# También intenta el push diario cada hora (respeta la hora Ecuador del admin).
+#
+# Configura el secret CRON_SECRET en GitHub (mismo valor que en Vercel)
+# para que daily-push / keep-alive autorizados funcionen.
+# El health?ping=1 mantiene vivo Supabase aunque falte el secret.
+
+on:
+  schedule:
+    - cron: '5 * * * *'
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping producción y Supabase
+        env:
+          APP_URL: https://camino-a-tu-cumple.vercel.app
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -u
+          echo "→ health?ping=1 (keep-alive mínimo)"
+          curl -fsS "${APP_URL}/api/health?ping=1"
+          echo
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "⚠️ CRON_SECRET no configurado en GitHub Secrets."
+            echo "   El ping a /api/health ya toca Supabase."
+            echo "   Añade CRON_SECRET para daily-push horario."
+            exit 0
+          fi
+
+          echo "→ keep-alive cron"
+          curl -fsS -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/keep-alive"
+          echo
+
+          echo "→ daily-push (skipped si no es la hora del aviso)"
+          curl -fsS -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/daily-push"
+          echo
