@@ -1,6 +1,7 @@
 import React from 'react';
 import { ImageBackground, StyleSheet, View, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { THEME } from '../lib/layout';
 
 const DEFAULT_BACKGROUND = require('../assets/images/fondo.png');
 
@@ -13,7 +14,8 @@ export default function AppBackground({ children, overlayColors, style, imageUrl
         <ImageBackground
           source={source}
           style={styles.backdropImage}
-          resizeMode="cover"
+          // contain: se ve toda la foto (cover la recorta / "hace zoom")
+          resizeMode="contain"
           accessibilityIgnoresInvertColors
         />
         <LinearGradient colors={overlayColors} style={StyleSheet.absoluteFill} />
@@ -39,9 +41,11 @@ const styles = StyleSheet.create({
       width: '100%',
       height: '100%',
       zIndex: 0,
+      backgroundColor: THEME.primary,
     },
     default: {
       ...StyleSheet.absoluteFillObject,
+      backgroundColor: THEME.primary,
     },
   }),
   backdropImage: {
