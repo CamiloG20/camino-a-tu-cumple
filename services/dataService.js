@@ -7,9 +7,25 @@ import { TOTAL_EVENT_DAYS } from '../lib/calendar';
 import { getTodayDateKey } from '../lib/timezone';
 
 const DAYS_CACHE_KEY = 'daysCache_v3';
+const LOCAL_FONDO = require('../assets/images/fondo.png');
 
-const PLACEHOLDER_IMAGE =
-  Image.resolveAssetSource(require('../assets/images/fondo.png'))?.uri || '';
+/** URI de asset local; Image.resolveAssetSource no existe en react-native-web. */
+function getLocalAssetUri(source) {
+  if (!source) return '';
+  if (typeof source === 'string') return source;
+  if (typeof source?.uri === 'string') return source.uri;
+  if (typeof source?.default === 'string') return source.default;
+  if (typeof Image.resolveAssetSource === 'function') {
+    try {
+      return Image.resolveAssetSource(source)?.uri || '';
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+const PLACEHOLDER_IMAGE = getLocalAssetUri(LOCAL_FONDO);
 
 function mapDayRow(row) {
   return {
