@@ -805,11 +805,6 @@ export default function AdminScreen() {
                 />
                 <View style={styles.actionRow}>
                   <WebFileInput accept="image/*" label="Subir imagen" onSelect={(file) => handleUpload('main', file)} />
-                  <GooglePhotosButton
-                    label="Desde Google Fotos"
-                    disabled={Boolean(busyAction)}
-                    onPress={() => handlePickFromGooglePhotos('main')}
-                  />
                   {form.image_path ? (
                     <TouchableOpacity
                       style={styles.dangerBtn}
@@ -896,12 +891,23 @@ export default function AdminScreen() {
                 ) : (
                   <Text style={styles.pathText}>Sin fotos extra</Text>
                 )}
-                <WebFileInput accept="image/*" label="Subir foto extra" onSelect={(file) => handleUpload('extra', file)} />
-                <GooglePhotosButton
-                  label="Desde Google Fotos"
-                  disabled={Boolean(busyAction)}
-                  onPress={() => handlePickFromGooglePhotos('extra')}
-                />
+                <Text style={styles.pathText}>Añadir foto extra — elige origen:</Text>
+                <View style={styles.actionRow}>
+                  <WebFileInput
+                    accept="image/*"
+                    label="Desde el dispositivo"
+                    onSelect={(file) => handleUpload('extra', file)}
+                  />
+                  <GooglePhotosButton
+                    label={
+                      busyAction === 'google-photos-extra'
+                        ? 'Abriendo Google Fotos…'
+                        : 'Desde Google Fotos'
+                    }
+                    disabled={Boolean(busyAction)}
+                    onPress={() => handlePickFromGooglePhotos('extra')}
+                  />
+                </View>
 
                 <Text style={styles.sectionTitle}>Audio / canción</Text>
                 {form.audio_path ? (

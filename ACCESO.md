@@ -31,7 +31,7 @@ Referencia rápida para abrir la app, el panel admin y los enlaces útiles.
 
 - **Fondo general** de la app (subir / quitar imagen).
 - **Por cada día (31 → 0):** mensaje, imagen, fotos extra, audio, fondo del día, regalo.
-- **Google Fotos (opcional):** botón “Desde Google Fotos” si configuras `EXPO_PUBLIC_GOOGLE_PHOTOS_CLIENT_ID` (Photos Picker API + OAuth Web Client en el proyecto GCP `camino-a-tu-cumple`). Dentro del Picker puedes buscar por persona.
+- **Fotos extra:** al añadir, eliges **Desde el dispositivo** o **Desde Google Fotos** (Picker oficial; puedes filtrar por persona). Requiere OAuth Web Client en GCP `camino-a-tu-cumple`.
 - **Hora del aviso** diario (hora Ecuador / Quito).
 - **Vista previa** de cada día antes de publicar.
 
