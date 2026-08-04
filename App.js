@@ -364,33 +364,38 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   useEffect(() => {
     if (loading || adminPreview || eventNotStarted) return;
-    // Una sola cola: bienvenida → sorpresa pendiente → regalo de hoy
     if (showDayWelcome || showSurpriseGame || showGiftModal) return;
 
-    if (shouldShowDayWelcome(new Date(), notificationHour)) {
-      setWelcomePayload(getDayWelcomePayload());
-      setShowDayWelcome(true);
-      setDeferAutoSurprise(false);
-      return;
-    }
-
-    // “Ver después”: deja ver el calendario; el regalo se abre al tocar el icono
-    if (deferAutoSurprise) return;
-
+    const todayNumber = getDaysUntilBirthday();
     const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
-    if (pending.length) {
-      const day = days.find((d) => d.dayNumber === pending[0]);
+    // Sorpresas de días anteriores sin elegir: forzar el juego
+    const pastPending = pending.filter((n) => n > todayNumber);
+    if (pastPending.length) {
+      const day = days.find((d) => d.dayNumber === pastPending[0]);
       if (day?.hasGift) {
         startSurpriseGame(day);
         return;
       }
     }
 
-    if (!currentDay?.hasGift || todayIndex !== realTodayIndex) return;
-    if (openedGifts[String(currentDay.dayNumber)] && surprisePicks[String(currentDay.dayNumber)]) {
+    // Hoy con regalo sin elegir: modal “Abrir mi sorpresa” (no el juego directo)
+    const todayGiftPending =
+      currentDay?.hasGift &&
+      todayIndex === realTodayIndex &&
+      !surprisePicks[String(currentDay.dayNumber)];
+
+    if (todayGiftPending) {
+      if (deferAutoSurprise) return; // “Ver después” en esta sesión
+      setWelcomePayload(getDayWelcomePayload(new Date()));
+      setShowDayWelcome(true);
       return;
     }
-    openGiftOrGame(currentDay);
+
+    // Día sin regalo pendiente: aviso diario una sola vez
+    if (shouldShowDayWelcome(new Date(), notificationHour)) {
+      setWelcomePayload(getDayWelcomePayload(new Date()));
+      setShowDayWelcome(true);
+    }
   }, [
     loading,
     adminPreview,
@@ -405,9 +410,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     currentDay,
     todayIndex,
     realTodayIndex,
-    openedGifts,
     startSurpriseGame,
-    openGiftOrGame,
   ]);
 
   useEffect(() => {
