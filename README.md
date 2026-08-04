@@ -44,6 +44,7 @@ Panel admin: `http://localhost:8081/#/admin`
 | `EXPO_PUBLIC_BIRTHDAY_DAY` | Día del fin (default: **9**) |
 | `EXPO_PUBLIC_SITE_URL` | URL pública (default: producción Vercel) |
 | `EXPO_PUBLIC_ADMIN_API_URL` | Solo desarrollo local (`http://localhost:8787`) |
+| `EXPO_PUBLIC_GOOGLE_PHOTOS_CLIENT_ID` | Opcional. OAuth Client ID web para “Desde Google Fotos” en admin |
 | `ADMIN_PASSWORD` | Contraseña del panel admin |
 | `ADMIN_TOKEN_SECRET` | Opcional. Firma tokens de sesión admin (default: `ADMIN_PASSWORD`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Solo servidor / scripts |

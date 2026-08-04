@@ -31,6 +31,7 @@ Referencia rápida para abrir la app, el panel admin y los enlaces útiles.
 
 - **Fondo general** de la app (subir / quitar imagen).
 - **Por cada día (31 → 0):** mensaje, imagen, fotos extra, audio, fondo del día, regalo.
+- **Google Fotos (opcional):** botón “Desde Google Fotos” si configuras `EXPO_PUBLIC_GOOGLE_PHOTOS_CLIENT_ID` (Photos Picker API + OAuth Web Client en el proyecto GCP `camino-a-tu-cumple`). Dentro del Picker puedes buscar por persona.
 - **Hora del aviso** diario (hora Ecuador / Quito).
 - **Vista previa** de cada día antes de publicar.
 
@@ -104,3 +105,11 @@ Contraseña local: `ADMIN_PASSWORD` en tu archivo `.env`.
 - La **anon key** de Supabase va en `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Vercel + local). Es pública en el cliente, pero no la pegues en chats ni issues.
 - La app de ella **no lleva** login; solo el admin está protegido.
 - Si cambias variables en Vercel, haz **redeploy** para que surtan efecto en producción.
+
+### Google Photos Picker (admin)
+
+1. [Console](https://console.cloud.google.com/welcome?project=camino-a-tu-cumple) → activar **Google Photos Picker API**.
+2. OAuth consent screen (External / Testing) → añadir tu Gmail como tester.
+3. Credenciales → OAuth Client ID → **Web application**  
+   Orígenes JS: `http://localhost:8081`, `https://camino-a-tu-cumple.vercel.app`
+4. `EXPO_PUBLIC_GOOGLE_PHOTOS_CLIENT_ID=….apps.googleusercontent.com` en `.env` y Vercel → redeploy.

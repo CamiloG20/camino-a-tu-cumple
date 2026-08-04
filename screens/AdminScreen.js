@@ -30,6 +30,10 @@ import {
   TOTAL_EVENT_DAYS,
 } from '../lib/calendar';
 import { dayToForm, formToPayload, formsEqual, getFileName } from './admin/dayFormUtils';
+import {
+  isGooglePhotosPickerConfigured,
+  pickGooglePhotosFiles,
+} from '../lib/googlePhotosPicker';
 
 function WebAudioPlayer({ src, title }) {
   if (Platform.OS !== 'web' || !src) return null;
@@ -62,6 +66,25 @@ function WebFileInput({ accept, onSelect, label }) {
   );
 }
 
+function GooglePhotosButton({ label, onPress, disabled }) {
+  if (Platform.OS !== 'web' || !isGooglePhotosPickerConfigured()) return null;
+
+  return (
+    <button
+      type="button"
+      style={{
+        ...webStyles.googlePhotosBtn,
+        opacity: disabled ? 0.6 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
+      disabled={disabled}
+      onClick={onPress}
+    >
+      {label}
+    </button>
+  );
+}
+
 const webStyles = {
   fileLabel: {
     display: 'inline-block',
@@ -70,6 +93,18 @@ const webStyles = {
     padding: '10px 16px',
     borderRadius: 8,
     cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: 600,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  googlePhotosBtn: {
+    display: 'inline-block',
+    backgroundColor: '#1a73e8',
+    color: '#fff',
+    border: 'none',
+    padding: '10px 16px',
+    borderRadius: 8,
     fontSize: 14,
     fontWeight: 600,
     marginRight: 8,
@@ -389,6 +424,34 @@ export default function AdminScreen() {
       Alert.alert('Listo', 'Archivo subido correctamente');
     } catch (error) {
       Alert.alert('Error', error.message);
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  async function handlePickFromGooglePhotos(type) {
+    if (!selectedDay) return;
+
+    try {
+      setBusyAction(`google-photos-${type}`);
+      const files = await pickGooglePhotosFiles({
+        multiple: type === 'extra',
+        maxItems: type === 'extra' ? 12 : 1,
+      });
+
+      for (const file of files) {
+        await AdminApi.uploadFile(selectedDay, file, type);
+      }
+
+      await loadDays();
+      Alert.alert(
+        'Listo',
+        files.length === 1
+          ? 'Foto subida desde Google Fotos'
+          : `${files.length} fotos subidas desde Google Fotos`
+      );
+    } catch (error) {
+      Alert.alert('Google Fotos', error.message || 'No se pudo importar');
     } finally {
       setBusyAction('');
     }
@@ -742,6 +805,11 @@ export default function AdminScreen() {
                 />
                 <View style={styles.actionRow}>
                   <WebFileInput accept="image/*" label="Subir imagen" onSelect={(file) => handleUpload('main', file)} />
+                  <GooglePhotosButton
+                    label="Desde Google Fotos"
+                    disabled={Boolean(busyAction)}
+                    onPress={() => handlePickFromGooglePhotos('main')}
+                  />
                   {form.image_path ? (
                     <TouchableOpacity
                       style={styles.dangerBtn}
@@ -829,6 +897,11 @@ export default function AdminScreen() {
                   <Text style={styles.pathText}>Sin fotos extra</Text>
                 )}
                 <WebFileInput accept="image/*" label="Subir foto extra" onSelect={(file) => handleUpload('extra', file)} />
+                <GooglePhotosButton
+                  label="Desde Google Fotos"
+                  disabled={Boolean(busyAction)}
+                  onPress={() => handlePickFromGooglePhotos('extra')}
+                />
 
                 <Text style={styles.sectionTitle}>Audio / canción</Text>
                 {form.audio_path ? (
