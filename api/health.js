@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { setCors, handleOptions } from './_lib/admin.js';
+import { getTodayDateKey } from '../lib/timezone.js';
 
 /**
  * Health check. Con ?ping=1 toca Supabase con la anon key
@@ -33,7 +34,7 @@ export default async function handler(req, res) {
     const started = Date.now();
 
     // RPC pública de la app: genera actividad real y valida el schema.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayDateKey();
     const { data, error } = await supabase.rpc('get_unlocked_days', { as_of: today });
 
     if (error) {

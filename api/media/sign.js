@@ -5,6 +5,7 @@ import {
   handleOptions,
 } from '../_lib/admin.js';
 import { parseJsonBody } from '../_lib/parseBody.js';
+import { sanitizeStorageKey } from '../../lib/storageSanitize.js';
 
 export default async function handler(req, res) {
   setCors(res, req);
@@ -20,9 +21,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'JSON inválido' });
   }
 
-  const path = body.path?.trim();
-  if (!path) {
+  const rawPath = body.path?.trim();
+  if (!rawPath) {
     return res.status(400).json({ error: 'path requerido' });
+  }
+
+  let path;
+  try {
+    path = sanitizeStorageKey(rawPath);
+  } catch {
+    return res.status(400).json({ error: 'Ruta de storage inválida' });
   }
 
   try {

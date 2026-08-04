@@ -6,7 +6,8 @@ import { resolveStorageUrl } from '../lib/mediaUrl';
 import { TOTAL_EVENT_DAYS } from '../lib/calendar';
 import { getTodayDateKey } from '../lib/timezone';
 
-const DAYS_CACHE_KEY = 'daysCache_v3';
+/** v4: solo paths en disco; las signed URLs se re-firman al leer. */
+const DAYS_CACHE_KEY = 'daysCache_v4';
 const LOCAL_FONDO = require('../assets/images/fondo.png');
 
 /** URI de asset local; Image.resolveAssetSource no existe en react-native-web. */
@@ -44,6 +45,19 @@ function mapDayRow(row) {
 
 function mapAdminDayRow(row) {
   return mapDayRow(row);
+}
+
+/** Quita URLs firmadas antes de persistir (expiran ~1h). */
+function stripSignedMedia(day) {
+  const {
+    imageUrl: _iu,
+    audioUrl: _au,
+    backgroundUrl: _bu,
+    photos: _ph,
+    enriched: _en,
+    ...rest
+  } = day;
+  return rest;
 }
 
 async function getDayPhotos(day) {
@@ -128,7 +142,10 @@ export class DataService {
     try {
       const rawDays = adminDays ?? (await this.getUnlockedDays());
       const days = await Promise.all(rawDays.map((day) => lightEnrichDay(day)));
-      await AsyncStorage.setItem(DAYS_CACHE_KEY, JSON.stringify(days)).catch(() => {});
+      await AsyncStorage.setItem(
+        DAYS_CACHE_KEY,
+        JSON.stringify(days.map(stripSignedMedia))
+      ).catch(() => {});
       return { days, fromCache: false };
     } catch (error) {
       const cached = await this.getCachedDays();
@@ -147,7 +164,8 @@ export class DataService {
       if (!Array.isArray(days) || days.length === 0) {
         return null;
       }
-      return days;
+      // Re-firmar paths al leer (URLs viejas no se guardan).
+      return Promise.all(days.map((day) => lightEnrichDay(stripSignedMedia(day))));
     } catch {
       return null;
     }

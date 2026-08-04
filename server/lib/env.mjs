@@ -21,17 +21,4 @@ export function loadEnv() {
   return env;
 }
 
-export function sanitizeStorageKey(path) {
-  return path
-    .split('/')
-    .map((part) =>
-      part
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9.\-_ ]/g, '_')
-        .replace(/\s+/g, ' ')
-        .replace(/_+/g, '_')
-        .trim()
-    )
-    .join('/');
-}
+export { sanitizeStorageKey } from '../../lib/storageSanitize.js';

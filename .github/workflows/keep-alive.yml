@@ -1,9 +1,9 @@
 name: Keep Supabase awake
 
-# Evita que Party-Bel_Amour (tivquhixdeutjlndafcm) se pause por inactividad.
+# Evita que Party-Bel_Amour se pause por inactividad.
 # 1) Ping directo a Supabase (anon key en secret SUPABASE_ANON_KEY)
-# 2) Ping a /api/health?ping=1 en Vercel (cuando el deploy esté Ready)
-# 3) Opcional: CRON_SECRET para daily-push / keep-alive de Vercel
+# 2) Ping a /api/health?ping=1 en Vercel
+# 3) daily-push horario (respeta notification_hour de BD; requiere CRON_SECRET)
 
 on:
   schedule:
@@ -23,7 +23,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -u
-          TODAY="$(date -u +%F)"
+          TODAY="$(TZ=America/Guayaquil date +%F)"
 
           if [ -n "${SUPABASE_ANON_KEY:-}" ]; then
             echo "→ ping directo Supabase RPC get_unlocked_days ($TODAY)"
@@ -53,18 +53,11 @@ jobs:
           echo
 
           if [ -z "${CRON_SECRET:-}" ]; then
-            echo "ℹ️ CRON_SECRET no configurado (opcional para daily-push)."
+            echo "ℹ️ CRON_SECRET no configurado (necesario para daily-push)."
             exit 0
           fi
 
-          echo "→ keep-alive cron Vercel"
-          curl -sS -o /tmp/ka.json -w "HTTP %{http_code}\n" \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${APP_URL}/api/cron/keep-alive" || true
-          cat /tmp/ka.json 2>/dev/null | head -c 300 || true
-          echo
-
-          echo "→ daily-push"
+          echo "→ daily-push (omite si no es la hora de notificación)"
           curl -sS -o /tmp/push.json -w "HTTP %{http_code}\n" \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${APP_URL}/api/cron/daily-push" || true

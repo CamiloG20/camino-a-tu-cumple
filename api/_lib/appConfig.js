@@ -2,7 +2,10 @@
  * Configuración pública de la app (hora de aviso, fondos, etc.).
  */
 import { DEFAULT_HOUR } from '../../lib/dailyNotifications.js';
+import { APP_TIMEZONE } from '../../lib/timezone.js';
 import { createSignedMediaUrl } from './admin.js';
+
+export const APP_TIMEZONE_LABEL = APP_TIMEZONE;
 
 export function normalizeNotificationHour(value, fallback = DEFAULT_HOUR) {
   if (value === undefined || value === null || value === '') {

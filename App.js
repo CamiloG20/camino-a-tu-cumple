@@ -180,20 +180,20 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   );
 
   const closeSurpriseGame = useCallback(() => {
-    const pending = getPendingSurpriseDayNumbers(surprisePicks);
+    const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
     // No dejar cerrar si hay sorpresa pendiente por elegir
     if (pending.length && surpriseGameDay && pending.includes(surpriseGameDay.dayNumber)) {
       return;
     }
     setShowSurpriseGame(false);
     setSurpriseGameDay(null);
-  }, [surprisePicks, surpriseGameDay]);
+  }, [surprisePicks, surpriseGameDay, days]);
 
   const mustPickSurprise = useMemo(() => {
     if (!surpriseGameDay) return false;
-    const pending = getPendingSurpriseDayNumbers(surprisePicks);
+    const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
     return pending.includes(surpriseGameDay.dayNumber);
-  }, [surpriseGameDay, surprisePicks]);
+  }, [surpriseGameDay, surprisePicks, days]);
 
   const markDayViewed = useCallback(async (dayNumber) => {
     const key = String(dayNumber);
@@ -348,7 +348,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
       return;
     }
 
-    const pending = getPendingSurpriseDayNumbers(surprisePicks);
+    const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
     if (pending.length) {
       const day = days.find((d) => d.dayNumber === pending[0]);
       if (day?.hasGift) {

@@ -4,9 +4,6 @@
  * Ejecutar: npm test
  */
 import assert from 'assert';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
 
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'test-password-for-unit';
 process.env.ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET || 'test-token-secret';
@@ -23,10 +20,6 @@ function test(name, fn) {
     process.exitCode = 1;
   }
 }
-
-// Cargar con require: Babel/Metro usa export, Node los trata como ESM si hay "export".
-// Preferimos import dinámico con rutas absolutas file:// y query — más simple: duplicar asserts
-// sobre lógica pura importando solo archivos con extensión en sus deps.
 
 const { pathToFileURL } = await import('url');
 const { resolve, dirname } = await import('path');
@@ -45,12 +38,26 @@ const {
   applyGiftScheduleToDays,
   GIFT_DAY_COUNT,
 } = await load('lib/giftSchedule.js');
-const { getAppHour, getTodayDateKey, APP_TIMEZONE } = await load('lib/timezone.js');
+const { getAppHour, getTodayDateKey, APP_TIMEZONE, ecuadorLocalToUtc } = await load('lib/timezone.js');
+const {
+  getDaysUntilBirthday,
+  getBirthdayDate,
+  isBeforeEventStart,
+} = await load('lib/calendar.js');
+const { sanitizeStorageKey, isStoragePathAllowedForDay } = await load('lib/storageSanitize.js');
 
 test('timezone Ecuador definida', () => {
   assert.equal(APP_TIMEZONE, 'America/Guayaquil');
   assert.equal(typeof getAppHour(), 'number');
   assert.match(getTodayDateKey(), /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('calendar usa día civil Ecuador (UTC getters)', () => {
+  const appDate = new Date(ecuadorLocalToUtc(2026, 8, 9, 12, 0, 0));
+  assert.equal(getDaysUntilBirthday(appDate), 0);
+  assert.equal(isBeforeEventStart(appDate), false);
+  assert.equal(getBirthdayDate(2026).getUTCMonth(), 7);
+  assert.equal(getBirthdayDate(2026).getUTCDate(), 9);
 });
 
 test('gift schedule: 4 días únicos', () => {
@@ -69,6 +76,32 @@ test('applyGiftScheduleToDays respeta hasGift de BD', () => {
   ]);
   assert.equal(withDb[0].hasGift, true);
   assert.equal(withDb[1].hasGift, false);
+});
+
+test('pending gifts: filtrar por hasGift + desbloqueados (misma regla que surprisePicks)', () => {
+  const todayNumber = getDaysUntilBirthday(getBirthdayDate(2026));
+  assert.equal(todayNumber, 0);
+  const days = [
+    { dayNumber: 20, hasGift: true },
+    { dayNumber: 10, hasGift: false },
+    { dayNumber: 5, hasGift: true },
+  ];
+  const picks = {};
+  const pending = days
+    .filter((d) => d.hasGift)
+    .map((d) => d.dayNumber)
+    .filter((dayNumber) => dayNumber >= todayNumber && picks[String(dayNumber)] == null)
+    .sort((a, b) => b - a);
+  assert.deepEqual(pending, [20, 5]);
+});
+
+test('sanitizeStorageKey rechaza path traversal', () => {
+  assert.equal(sanitizeStorageKey('images/12.jpg'), 'images/12.jpg');
+  assert.throws(() => sanitizeStorageKey('../secrets/x'), /inválida/);
+  assert.throws(() => sanitizeStorageKey('photos/day1/../../x'), /inválida/);
+  assert.equal(isStoragePathAllowedForDay('images/12.jpg', 12), true);
+  assert.equal(isStoragePathAllowedForDay('images/11.jpg', 12), false);
+  assert.equal(isStoragePathAllowedForDay('photos/day12/a.jpg', 12), true);
 });
 
 test('timingSafeEqualString', () => {

@@ -7,6 +7,7 @@ import {
   handleOptions,
 } from '../../_lib/admin.js';
 import { parseJsonBody } from '../../_lib/parseBody.js';
+import { isStoragePathAllowedForDay, sanitizeStorageKey } from '../../../lib/storageSanitize.js';
 
 export default async function handler(req, res) {
   setCors(res, req);
@@ -27,9 +28,26 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'JSON inválido' });
   }
 
-  const paths = Array.isArray(body.paths) ? body.paths : [];
-  if (!paths.length) {
+  const rawPaths = Array.isArray(body.paths) ? body.paths : [];
+  if (!rawPaths.length) {
     return res.status(400).json({ error: 'Se requiere al menos una ruta' });
+  }
+
+  let paths;
+  try {
+    paths = rawPaths
+      .filter((path) => path && typeof path === 'string' && !path.startsWith('http'))
+      .map((path) => sanitizeStorageKey(path));
+  } catch {
+    return res.status(400).json({ error: 'Ruta de storage inválida' });
+  }
+
+  if (!paths.length) {
+    return res.status(400).json({ error: 'Se requiere al menos una ruta válida' });
+  }
+
+  if (paths.some((path) => !isStoragePathAllowedForDay(path, dayNumber))) {
+    return res.status(400).json({ error: 'La ruta no pertenece a este día' });
   }
 
   try {

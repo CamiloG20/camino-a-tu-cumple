@@ -2,14 +2,15 @@ import { createClient } from '@supabase/supabase-js';
 import { buildTodayPushPayload, sendPushNotification } from '../_lib/webPush.js';
 import { getAppCalendarDate, getAppHour } from '../../lib/timezone.js';
 import { fetchNotificationHourFromDb } from '../_lib/appConfig.js';
+import { timingSafeEqualString } from '../../lib/safeCompare.js';
 
+/** Solo Bearer CRON_SECRET. No confiar en x-vercel-cron (forjable). */
 function isAuthorizedCron(req) {
   const secret = process.env.CRON_SECRET?.trim();
-  if (secret) {
-    const auth = req.headers.authorization || '';
-    if (auth === `Bearer ${secret}`) return true;
-  }
-  return req.headers['x-vercel-cron'] === '1';
+  if (!secret) return false;
+  const auth = req.headers.authorization || '';
+  const expected = `Bearer ${secret}`;
+  return timingSafeEqualString(auth, expected);
 }
 
 function getSupabase() {

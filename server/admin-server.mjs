@@ -4,9 +4,10 @@ import multer from 'multer';
 import { loadEnv, sanitizeStorageKey } from './lib/env.mjs';
 import { getAdminSupabase, getStorageBucket } from './lib/supabaseAdmin.mjs';
 import { downloadAudioMp3 } from './lib/ytdlp.mjs';
-import { isAllowedUpload } from '../lib/storageSanitize.js';
+import { isAllowedUpload, isStoragePathAllowedForDay } from '../lib/storageSanitize.js';
 import { createAdminToken, verifyAdminToken } from '../lib/adminToken.js';
 import { parseDayNumber } from '../lib/dayValidation.js';
+import { timingSafeEqualString } from '../lib/safeCompare.js';
 import {
   buildPublicAppConfigPayload,
   updateGlobalBackgroundPath,
@@ -65,7 +66,11 @@ function requireAdmin(req, res, next) {
     return next();
   }
 
-  if (req.headers['x-admin-password'] === ADMIN_PASSWORD) {
+  const headerPassword = req.headers['x-admin-password'];
+  if (
+    typeof headerPassword === 'string' &&
+    timingSafeEqualString(headerPassword, ADMIN_PASSWORD)
+  ) {
     return next();
   }
 
@@ -183,7 +188,7 @@ app.post('/api/auth/verify', (req, res) => {
   if (!ADMIN_PASSWORD) {
     return res.status(500).json({ error: 'ADMIN_PASSWORD no configurado' });
   }
-  if (password !== ADMIN_PASSWORD) {
+  if (!timingSafeEqualString(password, ADMIN_PASSWORD)) {
     return res.status(401).json({ error: 'Contraseña incorrecta' });
   }
   res.json({ ok: true, token: createAdminToken(), expiresInHours: 8 });
@@ -191,14 +196,19 @@ app.post('/api/auth/verify', (req, res) => {
 
 app.post('/api/media/sign', requireAdmin, async (req, res) => {
   try {
-    const path = req.body?.path?.trim();
-    if (!path) {
+    const rawPath = req.body?.path?.trim();
+    if (!rawPath) {
       return res.status(400).json({ error: 'path requerido' });
     }
 
     const bucket = getStorageBucket();
     const supabase = getAdminSupabase();
-    const key = sanitizeStorageKey(path);
+    let key;
+    try {
+      key = sanitizeStorageKey(rawPath);
+    } catch {
+      return res.status(400).json({ error: 'Ruta de storage inválida' });
+    }
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
     if (error) throw error;
     res.json({ url: data.signedUrl });
@@ -421,16 +431,28 @@ app.post('/api/days/:dayNumber/delete-media', requireAdmin, async (req, res) => 
     if (dayNumber == null) {
       return res.status(400).json({ error: 'Día inválido (0-31)' });
     }
-    const paths = Array.isArray(req.body?.paths) ? req.body.paths : [];
-    if (!paths.length) {
+    const rawPaths = Array.isArray(req.body?.paths) ? req.body.paths : [];
+    if (!rawPaths.length) {
       return res.status(400).json({ error: 'Se requiere al menos una ruta' });
     }
 
     const bucket = getStorageBucket();
     const supabase = getAdminSupabase();
-    const keys = paths
-      .filter((path) => path && typeof path === 'string' && !path.startsWith('http'))
-      .map((path) => sanitizeStorageKey(path.replace(/^\/+/, '')));
+    let keys;
+    try {
+      keys = rawPaths
+        .filter((path) => path && typeof path === 'string' && !path.startsWith('http'))
+        .map((path) => sanitizeStorageKey(path));
+    } catch {
+      return res.status(400).json({ error: 'Ruta de storage inválida' });
+    }
+
+    if (!keys.length) {
+      return res.status(400).json({ error: 'Se requiere al menos una ruta válida' });
+    }
+    if (keys.some((path) => !isStoragePathAllowedForDay(path, dayNumber))) {
+      return res.status(400).json({ error: 'La ruta no pertenece a este día' });
+    }
 
     if (keys.length) {
       const { error: removeError } = await supabase.storage.from(bucket).remove(keys);
@@ -450,15 +472,15 @@ app.post('/api/days/:dayNumber/delete-media', requireAdmin, async (req, res) => 
         has_gift: existing.has_gift ?? false,
         gift_number: existing.gift_number ?? null,
         gift_message: existing.gift_message ?? null,
-        image_path: paths.includes(existing.image_path) ? null : existing.image_path,
-        audio_path: paths.includes(existing.audio_path) ? null : existing.audio_path,
-        background_path: paths.includes(existing.background_path) ? null : existing.background_path,
-        photo_paths: (existing.photo_paths || []).filter((path) => !paths.includes(path)),
+        image_path: keys.includes(existing.image_path) ? null : existing.image_path,
+        audio_path: keys.includes(existing.audio_path) ? null : existing.audio_path,
+        background_path: keys.includes(existing.background_path) ? null : existing.background_path,
+        photo_paths: (existing.photo_paths || []).filter((path) => !keys.includes(path)),
       };
       await supabase.from('days').upsert(patch, { onConflict: 'day_number' });
     }
 
-    res.json({ ok: true, deleted: paths.length });
+    res.json({ ok: true, deleted: keys.length });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
