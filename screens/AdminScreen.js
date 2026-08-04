@@ -901,7 +901,7 @@ export default function AdminScreen() {
                   <GooglePhotosButton
                     label={
                       busyAction === 'google-photos-extra'
-                        ? 'Abriendo Google Fotos…'
+                        ? 'Elige fotos en la ventana de Google…'
                         : 'Desde Google Fotos'
                     }
                     disabled={Boolean(busyAction)}
