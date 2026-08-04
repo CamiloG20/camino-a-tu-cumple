@@ -99,6 +99,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const [welcomePayload, setWelcomePayload] = useState(null);
   /** Tras “Ver después”, no abrir sorpresa/regalo automáticamente. */
   const [deferAutoSurprise, setDeferAutoSurprise] = useState(false);
+  /** Día de la sorpresa pendiente que abrirá “Abrir mi sorpresa”. */
+  const [welcomeGiftDay, setWelcomeGiftDay] = useState(null);
   const flatListRef = useRef(null);
   const galleryRef = useRef(null);
   const dayNavTokenRef = useRef(0);
@@ -182,14 +184,11 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   );
 
   const closeSurpriseGame = useCallback(() => {
-    const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
-    // No dejar cerrar si hay sorpresa pendiente por elegir
-    if (pending.length && surpriseGameDay && pending.includes(surpriseGameDay.dayNumber)) {
-      return;
-    }
+    // Se puede cerrar sin elegir: vuelve al calendario; al recargar sale “Abrir sorpresa”
     setShowSurpriseGame(false);
     setSurpriseGameDay(null);
-  }, [surprisePicks, surpriseGameDay, days]);
+    setDeferAutoSurprise(true);
+  }, []);
 
   const dismissDayWelcome = useCallback(() => {
     try {
@@ -198,6 +197,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
       // localStorage puede fallar en modo privado
     }
     setShowDayWelcome(false);
+    setWelcomeGiftDay(null);
     setDeferAutoSurprise(true);
   }, []);
 
@@ -207,18 +207,19 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     } catch {
       // ignore
     }
+    const dayToOpen = welcomeGiftDay || currentDay;
     setShowDayWelcome(false);
+    setWelcomeGiftDay(null);
     setDeferAutoSurprise(false);
-    if (currentDay?.hasGift && todayIndex === realTodayIndex) {
-      openGiftOrGame(currentDay);
+    if (dayToOpen?.hasGift) {
+      openGiftOrGame(dayToOpen);
     }
-  }, [currentDay, todayIndex, realTodayIndex, openGiftOrGame]);
+  }, [welcomeGiftDay, currentDay, openGiftOrGame]);
 
   const mustPickSurprise = useMemo(() => {
-    if (!surpriseGameDay) return false;
-    const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
-    return pending.includes(surpriseGameDay.dayNumber);
-  }, [surpriseGameDay, surprisePicks, days]);
+    // Ya no forzamos quedarse en el juego: pueden cerrar y elegir después
+    return false;
+  }, []);
 
   const markDayViewed = useCallback(async (dayNumber) => {
     const key = String(dayNumber);
@@ -365,34 +366,27 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   useEffect(() => {
     if (loading || adminPreview || eventNotStarted) return;
     if (showDayWelcome || showSurpriseGame || showGiftModal) return;
+    if (deferAutoSurprise) return;
 
-    const todayNumber = getDaysUntilBirthday();
     const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
-    // Sorpresas de días anteriores sin elegir: forzar el juego
-    const pastPending = pending.filter((n) => n > todayNumber);
-    if (pastPending.length) {
-      const day = days.find((d) => d.dayNumber === pastPending[0]);
+    // Cualquier sorpresa sin elegir → modal “Abrir mi sorpresa” (nunca el juego directo)
+    if (pending.length) {
+      const day = days.find((d) => d.dayNumber === pending[0]);
       if (day?.hasGift) {
-        startSurpriseGame(day);
+        setWelcomeGiftDay(day);
+        setWelcomePayload({
+          ...getDayWelcomePayload(new Date()),
+          dayNumber: day.dayNumber,
+          daysUntil: day.dayNumber,
+        });
+        setShowDayWelcome(true);
         return;
       }
     }
 
-    // Hoy con regalo sin elegir: modal “Abrir mi sorpresa” (no el juego directo)
-    const todayGiftPending =
-      currentDay?.hasGift &&
-      todayIndex === realTodayIndex &&
-      !surprisePicks[String(currentDay.dayNumber)];
-
-    if (todayGiftPending) {
-      if (deferAutoSurprise) return; // “Ver después” en esta sesión
-      setWelcomePayload(getDayWelcomePayload(new Date()));
-      setShowDayWelcome(true);
-      return;
-    }
-
     // Día sin regalo pendiente: aviso diario una sola vez
     if (shouldShowDayWelcome(new Date(), notificationHour)) {
+      setWelcomeGiftDay(null);
       setWelcomePayload(getDayWelcomePayload(new Date()));
       setShowDayWelcome(true);
     }
@@ -407,10 +401,6 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     notificationHour,
     surprisePicks,
     days,
-    currentDay,
-    todayIndex,
-    realTodayIndex,
-    startSurpriseGame,
   ]);
 
   useEffect(() => {
