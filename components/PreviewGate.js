@@ -5,7 +5,12 @@ import { GRADIENT_COLORS } from '../lib/layout';
 
 export default function PreviewGate({ dayNumber, onGoAdmin }) {
   return (
-    <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={GRADIENT_COLORS}
+        style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
+      />
       <View style={styles.card}>
         <Text style={styles.title}>Vista previa protegida</Text>
         <Text style={styles.text}>
@@ -15,7 +20,7 @@ export default function PreviewGate({ dayNumber, onGoAdmin }) {
           <Text style={styles.buttonText}>Ir al admin</Text>
         </TouchableOpacity>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -25,6 +30,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
+    position: 'relative',
   },
   card: {
     width: '100%',

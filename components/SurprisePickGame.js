@@ -166,7 +166,12 @@ export default function SurprisePickGame({
       accessibilityViewIsModal
     >
       <View style={styles.overlay}>
-        <LinearGradient colors={GRADIENT_COLORS} style={styles.sheet}>
+        <View style={styles.sheet}>
+          <LinearGradient
+            colors={GRADIENT_COLORS}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
           <View style={styles.header}>
             <MaterialIcons name="favorite" size={28} color="#fda4af" />
             <Text style={styles.title}>Tu sorpresa te espera</Text>
@@ -228,7 +233,7 @@ export default function SurprisePickGame({
               </Text>
             </Animated.View>
           ) : null}
-        </LinearGradient>
+        </View>
       </View>
     </Modal>
   );
@@ -250,6 +255,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 20,
     overflow: 'hidden',
+    position: 'relative',
   },
   header: {
     flexDirection: 'row',

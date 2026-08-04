@@ -7,6 +7,7 @@ export const createStyles = (isNarrow, isWide) =>
   StyleSheet.create({
   container: {
     flex: 1,
+    position: 'relative',
     ...(Platform.OS === 'web' ? { minHeight: '100dvh' } : { minHeight: '100%' }),
   },
   pageScroll: { flex: 1, width: '100%' },

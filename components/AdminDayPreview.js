@@ -62,7 +62,12 @@ export default function AdminDayPreview({ dayNumber, form, imageUrl, photoUrls, 
         ) : null}
       </View>
 
-      <LinearGradient colors={GRADIENT_COLORS} style={styles.phone}>
+      <View style={styles.phone}>
+        <LinearGradient
+          colors={GRADIENT_COLORS}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
         <Text style={styles.previewHeader}>{headerText}</Text>
         <Text style={styles.previewDate}>
           Día {dayNumber} · {formatCalendarDate(previewDate)}
@@ -111,7 +116,7 @@ export default function AdminDayPreview({ dayNumber, form, imageUrl, photoUrls, 
         ) : (
           <Text style={styles.noAudio}>Sin canción para este día</Text>
         )}
-      </LinearGradient>
+      </View>
     </View>
   );
 }
@@ -144,6 +149,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+    position: 'relative',
   },
   previewHeader: {
     color: '#fff',

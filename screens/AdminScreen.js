@@ -10,6 +10,7 @@ import {
   Switch,
   Alert,
   useWindowDimensions,
+  StyleSheet,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -548,7 +549,12 @@ export default function AdminScreen() {
 
   if (!authed) {
     return (
-      <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+      <View style={styles.container}>
+        <LinearGradient
+          colors={GRADIENT_COLORS}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
         <StatusBar style="light" />
         <View style={styles.loginCard}>
           <Text style={styles.title}>Panel Admin</Text>
@@ -581,12 +587,17 @@ export default function AdminScreen() {
             <Text style={styles.link}>← Volver a la app</Text>
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
     );
   }
 
   return (
-    <LinearGradient colors={GRADIENT_COLORS} style={styles.container}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={GRADIENT_COLORS}
+        style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
+      />
       <StatusBar style="light" />
       {loading ? (
         <ActivityIndicator color="#fff" size="large" style={{ marginTop: 40 }} />
@@ -975,7 +986,7 @@ export default function AdminScreen() {
           </View>
         </ScrollView>
       )}
-    </LinearGradient>
+    </View>
   );
 }
 
