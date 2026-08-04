@@ -96,7 +96,12 @@ export default function GiftModal({
       <Pressable style={styles.modalOverlay} onPress={onClose}>
         <Animated.View style={[styles.modalWrap, { opacity, transform: [{ scale }] }]}>
           <Pressable onPress={(event) => event.stopPropagation()}>
-            <LinearGradient colors={GRADIENT_COLORS} style={styles.modalContent}>
+            <View style={styles.modalContent}>
+              <LinearGradient
+                colors={GRADIENT_COLORS}
+                style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
+              />
               <View style={styles.confettiRow} pointerEvents="none">
                 {CONFETTI.map((emoji, index) => (
                   <ConfettiPiece
@@ -139,7 +144,7 @@ export default function GiftModal({
               >
                 <Text style={styles.modalButtonText}>¡Gracias! 💝</Text>
               </TouchableOpacity>
-            </LinearGradient>
+            </View>
           </Pressable>
         </Animated.View>
       </Pressable>
@@ -164,6 +169,7 @@ const styles = StyleSheet.create({
     padding: 28,
     alignItems: 'center',
     overflow: 'hidden',
+    position: 'relative',
     shadowColor: '#000',
     shadowOpacity: 0.35,
     shadowRadius: 24,

@@ -189,6 +189,22 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     setSurpriseGameDay(null);
   }, [surprisePicks, surpriseGameDay, days]);
 
+  const dismissDayWelcome = useCallback(() => {
+    try {
+      markDayWelcomeShown();
+    } catch {
+      // localStorage puede fallar en modo privado
+    }
+    setShowDayWelcome(false);
+  }, []);
+
+  const openDayWelcomeSurprise = useCallback(() => {
+    dismissDayWelcome();
+    if (currentDay?.hasGift && todayIndex === realTodayIndex) {
+      openGiftOrGame(currentDay);
+    }
+  }, [dismissDayWelcome, currentDay, todayIndex, realTodayIndex, openGiftOrGame]);
+
   const mustPickSurprise = useMemo(() => {
     if (!surpriseGameDay) return false;
     const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
@@ -692,7 +708,11 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
           </Pressable>
         </Animated.View>
       ) : null}
+    </>
+  );
 
+  const modals = (
+    <>
       <GiftModal
         visible={showGiftModal}
         categoryName={giftCategoryName}
@@ -719,14 +739,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
         dayNumber={welcomePayload?.dayNumber}
         daysUntil={welcomePayload?.daysUntil ?? diff}
         isBirthday={Boolean(welcomePayload?.isBirthday)}
-        onOpen={() => {
-          markDayWelcomeShown();
-          setShowDayWelcome(false);
-        }}
-        onClose={() => {
-          markDayWelcomeShown();
-          setShowDayWelcome(false);
-        }}
+        onOpen={openDayWelcomeSurprise}
+        onClose={dismissDayWelcome}
       />
     </>
   );
@@ -792,6 +806,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
       >
         <View style={styles.webInner}>{mainContent}</View>
       </ScrollView>
+      {modals}
     </AppBackground>
   );
 }

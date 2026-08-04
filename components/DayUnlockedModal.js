@@ -1,12 +1,24 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import {
+  Modal,
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Platform,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { GRADIENT_COLORS } from '../lib/layout';
 
-export default function DayUnlockedModal({ visible, dayNumber, daysUntil, isBirthday, onOpen, onClose }) {
-  if (!visible) return null;
-
+export default function DayUnlockedModal({
+  visible,
+  dayNumber,
+  daysUntil,
+  isBirthday,
+  onOpen,
+  onClose,
+}) {
   const title = isBirthday
     ? '¡Feliz cumpleaños! 🎂'
     : `Día ${dayNumber} desbloqueado`;
@@ -16,25 +28,49 @@ export default function DayUnlockedModal({ visible, dayNumber, daysUntil, isBirt
     : `Tu sorpresa de hoy ya está lista. Faltan ${daysUntil} días para tu cumple.`;
 
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+    <Modal
+      transparent
+      animationType="fade"
+      visible={Boolean(visible)}
+      onRequestClose={onClose}
+      accessibilityViewIsModal
+    >
       <View style={styles.backdrop}>
-        <LinearGradient colors={GRADIENT_COLORS} style={styles.card}>
-          <View style={styles.iconRing}>
-            <MaterialIcons name="favorite" size={42} color="#fff" />
+        <View style={styles.card}>
+          {/* Gradiente decorativo: pointerEvents none para no bloquear clics en web */}
+          <LinearGradient
+            colors={GRADIENT_COLORS}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+          <View style={styles.content}>
+            <View style={styles.iconRing} pointerEvents="none">
+              <MaterialIcons name="favorite" size={42} color="#fff" />
+            </View>
+            <Text style={styles.eyebrow}>Nueva sorpresa</Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
+
+            <Pressable
+              style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
+              onPress={onOpen}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir mi sorpresa"
+            >
+              <MaterialIcons name="card-giftcard" size={20} color="#0f2c2e" />
+              <Text style={styles.primaryText}>Abrir mi sorpresa</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Ver después"
+            >
+              <Text style={styles.secondaryText}>Ver después</Text>
+            </Pressable>
           </View>
-          <Text style={styles.eyebrow}>Nueva sorpresa</Text>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
-
-          <TouchableOpacity style={styles.primaryBtn} onPress={onOpen} accessibilityRole="button">
-            <MaterialIcons name="card-giftcard" size={20} color="#0f2c2e" />
-            <Text style={styles.primaryText}>Abrir mi sorpresa</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={onClose} style={styles.secondaryBtn} accessibilityRole="button">
-            <Text style={styles.secondaryText}>Ver después</Text>
-          </TouchableOpacity>
-        </LinearGradient>
+        </View>
       </View>
     </Modal>
   );
@@ -52,9 +88,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 360,
     borderRadius: 28,
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-    alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative',
     ...(Platform.OS === 'web'
       ? { boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }
       : {
@@ -63,6 +98,11 @@ const styles = StyleSheet.create({
           shadowRadius: 24,
           elevation: 12,
         }),
+  },
+  content: {
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    alignItems: 'center',
   },
   iconRing: {
     width: 84,
@@ -108,6 +148,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     width: '100%',
     justifyContent: 'center',
+    cursor: 'pointer',
   },
   primaryText: {
     color: '#0f2c2e',
@@ -117,10 +158,17 @@ const styles = StyleSheet.create({
   secondaryBtn: {
     marginTop: 14,
     paddingVertical: 8,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+    cursor: 'pointer',
   },
   secondaryText: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: 14,
     fontWeight: '600',
+  },
+  pressed: {
+    opacity: 0.85,
   },
 });
