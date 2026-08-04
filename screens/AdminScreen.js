@@ -20,6 +20,7 @@ import { getAdminApiUrl, isLocalAdminApi } from '../lib/config';
 import { useAdminSignedUrl, useAdminSignedUrls } from '../hooks/useAdminSignedUrl';
 import ProgressiveImage from '../components/ProgressiveImage';
 import AdminDayPreview from '../components/AdminDayPreview';
+import AdminLogin from '../components/admin/AdminLogin';
 import { GRADIENT_COLORS, THEME } from '../lib/layout';
 import { createStyles } from './AdminScreen.styles';
 import {
@@ -28,41 +29,7 @@ import {
   getEventStartDate,
   TOTAL_EVENT_DAYS,
 } from '../lib/calendar';
-
-function dayToForm(day) {
-  return {
-    text: day.text || '',
-    has_gift: Boolean(day.has_gift),
-    gift_number: day.gift_number != null ? String(day.gift_number) : '',
-    gift_message: day.gift_message || '',
-    image_path: day.image_path || '',
-    audio_path: day.audio_path || '',
-    background_path: day.background_path || '',
-    photo_paths: day.photo_paths || [],
-  };
-}
-
-function formToPayload(form) {
-  return {
-    text: form.text,
-    has_gift: form.has_gift,
-    gift_number: form.gift_number ? Number(form.gift_number) : null,
-    gift_message: form.gift_message?.trim() || null,
-    image_path: form.image_path || null,
-    audio_path: form.audio_path || null,
-    background_path: form.background_path || null,
-    photo_paths: form.photo_paths || [],
-  };
-}
-
-function formsEqual(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function getFileName(path) {
-  if (!path) return '';
-  return path.split('/').pop();
-}
+import { dayToForm, formToPayload, formsEqual, getFileName } from './admin/dayFormUtils';
 
 function WebAudioPlayer({ src, title }) {
   if (Platform.OS !== 'web' || !src) return null;
@@ -549,45 +516,13 @@ export default function AdminScreen() {
 
   if (!authed) {
     return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={GRADIENT_COLORS}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-        <StatusBar style="light" />
-        <View style={styles.loginCard}>
-          <Text style={styles.title}>Panel Admin</Text>
-          <Text style={styles.subtitle}>Camino a tu cumple</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Contraseña admin"
-            placeholderTextColor="#999"
-            secureTextEntry
-            style={styles.input}
-            accessibilityLabel="Contraseña de administrador"
-            returnKeyType="go"
-            onSubmitEditing={handleLogin}
-          />
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={handleLogin}
-            disabled={busyAction === 'login'}
-            accessibilityRole="button"
-            accessibilityLabel="Entrar al panel admin"
-          >
-            {busyAction === 'login' ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryBtnText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => { if (typeof window !== 'undefined') window.location.hash = ''; }}>
-            <Text style={styles.link}>← Volver a la app</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <AdminLogin
+        password={password}
+        setPassword={setPassword}
+        onLogin={handleLogin}
+        busy={busyAction === 'login'}
+        styles={styles}
+      />
     );
   }
 

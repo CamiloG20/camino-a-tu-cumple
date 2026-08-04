@@ -24,6 +24,8 @@ import AppBackground from './components/AppBackground';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useAppConfig } from './hooks/useAppConfig';
+import { usePrefersReducedMotion } from './hooks/usePrefersReducedMotion';
+import { useSurpriseFlow } from './hooks/useSurpriseFlow';
 import ProgressiveImage from './components/ProgressiveImage';
 import InstallPwaBanner from './components/InstallPwaBanner';
 import DailyNotificationBanner from './components/DailyNotificationBanner';
@@ -35,25 +37,11 @@ import SurprisePickGame from './components/SurprisePickGame';
 import FallbackBanner from './components/FallbackBanner';
 import DayGallery from './components/DayGallery';
 import DayUnlockedModal from './components/DayUnlockedModal';
-import {
-  getDayWelcomePayload,
-  markDayWelcomeShown,
-  shouldShowDayWelcome,
-} from './lib/dailyNotifications';
-import { resolveGiftMessage, getSurpriseOrdinal, GIFT_DAY_COUNT } from './lib/giftSchedule';
+import { getSurpriseOrdinal, GIFT_DAY_COUNT } from './lib/giftSchedule';
 import { createStyles } from './App.styles';
-import { getSurpriseCategoryName } from './lib/surpriseCategories';
-import {
-  loadSurprisePicks,
-  setSurprisePick,
-  getUsedCategoryNames,
-  getPendingSurpriseDayNumbers,
-} from './lib/surprisePicks';
 
 const FALLBACK_IMAGE = require('./assets/images/fondo.png');
 const VIEWED_KEY = 'viewedImages';
-/** v2: limpia aperturas de prueba del juego de sorpresas */
-const OPENED_GIFTS_KEY = 'openedGifts_v2';
 
 function parseStorageJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -70,6 +58,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
   const isOnline = useNetworkStatus();
   const { notificationHour, globalBackgroundUrl } = useAppConfig();
+  const reduceMotion = usePrefersReducedMotion();
 
   const [todayIndex, setTodayIndex] = useState(0);
   const [viewed, setViewed] = useState({});
@@ -79,28 +68,14 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const [enrichError, setEnrichError] = useState('');
   const [currentDay, setCurrentDay] = useState(null);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
-  const [showGiftModal, setShowGiftModal] = useState(false);
-  const [giftCategoryName, setGiftCategoryName] = useState('');
-  const [giftSurpriseOrdinal, setGiftSurpriseOrdinal] = useState(null);
   const [diff, setDiff] = useState(0);
   const [realTodayIndex, setRealTodayIndex] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [usingCache, setUsingCache] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
-  const [openedGifts, setOpenedGifts] = useState({});
-  const [giftMessage, setGiftMessage] = useState('');
-  const [surprisePicks, setSurprisePicks] = useState({});
-  const [showSurpriseGame, setShowSurpriseGame] = useState(false);
-  const [surpriseGameDay, setSurpriseGameDay] = useState(null);
   const [eventNotStarted, setEventNotStarted] = useState(false);
   const [daysUntilStart, setDaysUntilStart] = useState(0);
-  const [showDayWelcome, setShowDayWelcome] = useState(false);
-  const [welcomePayload, setWelcomePayload] = useState(null);
-  /** Tras “Ver después”, no abrir sorpresa/regalo automáticamente. */
-  const [deferAutoSurprise, setDeferAutoSurprise] = useState(false);
-  /** Día de la sorpresa pendiente que abrirá “Abrir mi sorpresa”. */
-  const [welcomeGiftDay, setWelcomeGiftDay] = useState(null);
   const flatListRef = useRef(null);
   const galleryRef = useRef(null);
   const dayNavTokenRef = useRef(0);
@@ -109,6 +84,34 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   useEffect(() => {
     realTodayIndexRef.current = realTodayIndex;
   }, [realTodayIndex]);
+
+  const {
+    openedGifts,
+    surprisePicks,
+    showGiftModal,
+    giftCategoryName,
+    giftSurpriseOrdinal,
+    giftMessage,
+    showSurpriseGame,
+    surpriseGameDay,
+    showDayWelcome,
+    welcomePayload,
+    usedCategoryNames,
+    mustPickSurprise,
+    handleSurprisePick,
+    closeSurpriseGame,
+    dismissDayWelcome,
+    openDayWelcomeSurprise,
+    closeGiftModal,
+    handleGiftPress,
+  } = useSurpriseFlow({
+    days,
+    currentDay,
+    loading,
+    adminPreview,
+    eventNotStarted,
+    notificationHour,
+  });
 
   const {
     hasValidAudio,
@@ -122,104 +125,6 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     setAudioPosition,
     formatAudioTime,
   } = useAudioPlayer(currentDay?.audioUrl);
-
-  const markGiftOpened = useCallback(async (dayNumber) => {
-    const key = String(dayNumber);
-    setOpenedGifts((prev) => {
-      if (prev[key]) return prev;
-      const next = { ...prev, [key]: true };
-      AsyncStorage.setItem(OPENED_GIFTS_KEY, JSON.stringify(next)).catch(() => {});
-      return next;
-    });
-  }, []);
-
-  const openGiftReveal = useCallback(
-    (day, categoryName) => {
-      if (!day?.hasGift || !categoryName) return;
-      const ordinal = getSurpriseOrdinal(day.dayNumber);
-      setGiftCategoryName(getSurpriseCategoryName(categoryName) || categoryName);
-      setGiftSurpriseOrdinal(ordinal);
-      setGiftMessage(resolveGiftMessage(day));
-      setShowGiftModal(true);
-      markGiftOpened(day.dayNumber);
-    },
-    [markGiftOpened]
-  );
-
-  const startSurpriseGame = useCallback((day) => {
-    if (!day?.hasGift) return;
-    setSurpriseGameDay(day);
-    setShowSurpriseGame(true);
-  }, []);
-
-  const openGiftOrGame = useCallback(
-    (day, picks = surprisePicks) => {
-      if (!day?.hasGift) return;
-      const categoryName = picks[String(day.dayNumber)];
-      if (categoryName) {
-        openGiftReveal(day, categoryName);
-        return;
-      }
-      startSurpriseGame(day);
-    },
-    [surprisePicks, openGiftReveal, startSurpriseGame]
-  );
-
-  const handleSurprisePick = useCallback(
-    async (categoryName) => {
-      if (!surpriseGameDay) return;
-      try {
-        const next = await setSurprisePick(surpriseGameDay.dayNumber, categoryName);
-        setSurprisePicks(next);
-        setShowSurpriseGame(false);
-        const day = surpriseGameDay;
-        setSurpriseGameDay(null);
-        openGiftReveal(day, categoryName);
-      } catch (error) {
-        Alert.alert('Ups', error.message || 'No se pudo guardar tu elección');
-        throw error;
-      }
-    },
-    [surpriseGameDay, openGiftReveal]
-  );
-
-  const closeSurpriseGame = useCallback(() => {
-    // Se puede cerrar sin elegir: vuelve al calendario; al recargar sale “Abrir sorpresa”
-    setShowSurpriseGame(false);
-    setSurpriseGameDay(null);
-    setDeferAutoSurprise(true);
-  }, []);
-
-  const dismissDayWelcome = useCallback(() => {
-    try {
-      markDayWelcomeShown(new Date());
-    } catch {
-      // localStorage puede fallar en modo privado
-    }
-    setShowDayWelcome(false);
-    setWelcomeGiftDay(null);
-    setDeferAutoSurprise(true);
-  }, []);
-
-  const openDayWelcomeSurprise = useCallback(() => {
-    try {
-      markDayWelcomeShown(new Date());
-    } catch {
-      // ignore
-    }
-    const dayToOpen = welcomeGiftDay || currentDay;
-    setShowDayWelcome(false);
-    setWelcomeGiftDay(null);
-    setDeferAutoSurprise(false);
-    if (dayToOpen?.hasGift) {
-      openGiftOrGame(dayToOpen);
-    }
-  }, [welcomeGiftDay, currentDay, openGiftOrGame]);
-
-  const mustPickSurprise = useMemo(() => {
-    // Ya no forzamos quedarse en el juego: pueden cerrar y elegir después
-    return false;
-  }, []);
 
   const markDayViewed = useCallback(async (dayNumber) => {
     const key = String(dayNumber);
@@ -324,13 +229,9 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
         }
 
         const viewedData = await AsyncStorage.getItem(VIEWED_KEY);
-        const openedData = await AsyncStorage.getItem(OPENED_GIFTS_KEY);
-        const picks = await loadSurprisePicks();
         if (cancelled) return;
 
         setViewed(parseStorageJson(viewedData));
-        setOpenedGifts(parseStorageJson(openedData));
-        setSurprisePicks(picks);
         setDays(daysData);
         setDiff(calculatedDiff);
         setEventNotStarted(beforeStart);
@@ -364,79 +265,28 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   }, [reloadToken, applyDayAtIndex, adminPreview, previewDayNumber]);
 
   useEffect(() => {
-    if (loading || adminPreview || eventNotStarted) return;
-    if (showDayWelcome || showSurpriseGame || showGiftModal) return;
-    if (deferAutoSurprise) return;
-
-    const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
-    // Cualquier sorpresa sin elegir → modal “Abrir mi sorpresa” (nunca el juego directo)
-    if (pending.length) {
-      const day = days.find((d) => d.dayNumber === pending[0]);
-      if (day?.hasGift) {
-        setWelcomeGiftDay(day);
-        setWelcomePayload({
-          ...getDayWelcomePayload(new Date()),
-          dayNumber: day.dayNumber,
-          daysUntil: day.dayNumber,
-        });
-        setShowDayWelcome(true);
-        return;
-      }
-    }
-
-    // Día sin regalo pendiente: aviso diario una sola vez
-    if (shouldShowDayWelcome(new Date(), notificationHour)) {
-      setWelcomeGiftDay(null);
-      setWelcomePayload(getDayWelcomePayload(new Date()));
-      setShowDayWelcome(true);
-    }
-  }, [
-    loading,
-    adminPreview,
-    eventNotStarted,
-    showDayWelcome,
-    showSurpriseGame,
-    showGiftModal,
-    deferAutoSurprise,
-    notificationHour,
-    surprisePicks,
-    days,
-  ]);
-
-  useEffect(() => {
     if (!galleryRef.current || todayIndex < 0) return;
     galleryRef.current.scrollToIndex?.({
       index: todayIndex,
-      animated: true,
+      animated: !reduceMotion,
       viewPosition: 0.5,
     });
-  }, [todayIndex, loading]);
+  }, [todayIndex, loading, reduceMotion]);
 
-  const audioButtonStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: isPlaying ? withSpring(1.1) : withSpring(1) }],
-    shadowOpacity: isPlaying ? 0.7 : 0.3,
-    shadowRadius: isPlaying ? 10 : 5,
-  }));
+  const audioButtonStyle = useAnimatedStyle(() => {
+    const scale = reduceMotion ? 1 : isPlaying ? withSpring(1.1) : withSpring(1);
+    return {
+      transform: [{ scale }],
+      shadowOpacity: isPlaying ? 0.7 : 0.3,
+      shadowRadius: isPlaying ? 10 : 5,
+    };
+  }, [isPlaying, reduceMotion]);
 
   const giftButtonStyle = useAnimatedStyle(() => ({
     shadowOpacity: 0.8,
     shadowRadius: 15,
-    transform: [{ scale: withSpring(1) }],
-  }));
-
-  function handleGiftPress() {
-    if (currentDay?.hasGift) {
-      setDeferAutoSurprise(false);
-      openGiftOrGame(currentDay);
-    }
-  }
-
-  function closeGiftModal() {
-    setShowGiftModal(false);
-    setGiftCategoryName('');
-    setGiftSurpriseOrdinal(null);
-    setGiftMessage('');
-  }
+    transform: [{ scale: reduceMotion ? 1 : withSpring(1) }],
+  }), [reduceMotion]);
 
   const effectiveTodayIndex = adminPreview
     ? days.length - 1
@@ -568,8 +418,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
           <Animated.View
             key={`day-${currentDay.dayNumber}`}
-            entering={FadeIn.duration(280)}
-            exiting={FadeOut.duration(180)}
+            entering={reduceMotion ? undefined : FadeIn.duration(280)}
+            exiting={reduceMotion ? undefined : FadeOut.duration(180)}
             style={[styles.imageContainer, isBirthdayDay && styles.birthdayImageContainer]}
           >
             {enrichingDay ? (
@@ -700,7 +550,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
           style={[
             styles.giftButtonSmall,
             giftButtonStyle,
-            !openedGifts[String(currentDay.dayNumber)] &&
+            !reduceMotion &&
+              !openedGifts[String(currentDay.dayNumber)] &&
               surprisePicks[String(currentDay.dayNumber)] == null &&
               styles.giftButtonPulse,
           ]}
@@ -736,7 +587,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
         surpriseOrdinal={
           surpriseGameDay ? getSurpriseOrdinal(surpriseGameDay.dayNumber) : null
         }
-        usedCategoryNames={[...getUsedCategoryNames(surprisePicks)]}
+        usedCategoryNames={usedCategoryNames}
         mustPick={mustPickSurprise}
         onPick={handleSurprisePick}
         onClose={closeSurpriseGame}

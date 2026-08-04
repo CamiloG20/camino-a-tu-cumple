@@ -30,7 +30,8 @@
     "setup:notification-hour": "node scripts/setup-notification-hour.mjs",
     "setup:backgrounds": "node scripts/setup-backgrounds.mjs",
     "setup:unlocked-days": "node scripts/setup-unlocked-days-past.mjs",
-    "test": "node scripts/run-tests.mjs"
+    "test": "node scripts/run-tests.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -60,6 +61,7 @@
     "multer": "^2.0.2",
     "pg": "^8.16.0",
     "sharp": "^0.34.3",
+    "typescript": "^5.9.2",
     "vercel": "^54.21.0",
     "web-push": "^3.6.7",
     "workbox-cli": "^7.3.0",

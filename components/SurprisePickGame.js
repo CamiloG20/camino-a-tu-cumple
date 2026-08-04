@@ -14,6 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { GRADIENT_COLORS, THEME } from '../lib/layout';
 import { SURPRISE_CATEGORIES } from '../lib/surpriseCategories';
 import { GIFT_DAY_COUNT } from '../lib/giftSchedule';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 
 function shuffle(list, seed = Date.now()) {
   const arr = [...list];
@@ -26,11 +27,15 @@ function shuffle(list, seed = Date.now()) {
   return arr;
 }
 
-function CardFace({ category, revealed, taken, selected, onPress, disabled, width }) {
+function CardFace({ category, revealed, taken, selected, onPress, disabled, width, reduceMotion }) {
   const flip = useRef(new Animated.Value(revealed || taken ? 1 : 0)).current;
 
   useEffect(() => {
     if (revealed || taken) {
+      if (reduceMotion) {
+        flip.setValue(1);
+        return;
+      }
       Animated.timing(flip, {
         toValue: 1,
         duration: 420,
@@ -38,7 +43,7 @@ function CardFace({ category, revealed, taken, selected, onPress, disabled, widt
         useNativeDriver: true,
       }).start();
     }
-  }, [revealed, taken, flip]);
+  }, [revealed, taken, flip, reduceMotion]);
 
   const frontRotate = flip.interpolate({
     inputRange: [0, 1],
@@ -103,6 +108,7 @@ export default function SurprisePickGame({
   onClose,
 }) {
   const { width: windowWidth } = useWindowDimensions();
+  const reduceMotion = usePrefersReducedMotion();
   const [pickedName, setPickedName] = useState(null);
   const [busy, setBusy] = useState(false);
   const celebrate = useRef(new Animated.Value(0)).current;
@@ -135,14 +141,7 @@ export default function SurprisePickGame({
     setBusy(true);
     setPickedName(category.name);
 
-    Animated.sequence([
-      Animated.timing(celebrate, {
-        toValue: 1,
-        duration: 350,
-        useNativeDriver: true,
-      }),
-      Animated.delay(900),
-    ]).start(async () => {
+    const finish = async () => {
       try {
         await onPick?.(category.name);
       } catch {
@@ -151,7 +150,22 @@ export default function SurprisePickGame({
       } finally {
         setBusy(false);
       }
-    });
+    };
+
+    if (reduceMotion) {
+      celebrate.setValue(1);
+      finish();
+      return;
+    }
+
+    Animated.sequence([
+      Animated.timing(celebrate, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.delay(900),
+    ]).start(finish);
   }
 
   const ordinalLabel = surpriseOrdinal || '?';
@@ -205,6 +219,7 @@ export default function SurprisePickGame({
                   selected={pickedName === category.name}
                   disabled={busy || pickedName != null}
                   onPress={() => handlePick(category)}
+                  reduceMotion={reduceMotion}
                 />
               );
             })}

@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "jsx": "react-native",
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "target": "esnext",
+    "lib": ["esnext", "dom"],
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["App.js", "Root.js", "index.js", "lib/**/*", "hooks/**/*", "components/**/*", "screens/**/*", "services/**/*"],
+  "exclude": ["node_modules", "dist", "api", "server", "scripts"]
+}

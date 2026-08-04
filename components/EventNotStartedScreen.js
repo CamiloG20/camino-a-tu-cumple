@@ -13,6 +13,7 @@ import Animated, {
 import { MaterialIcons } from '@expo/vector-icons';
 import { formatCalendarDate } from '../lib/calendar';
 import { FONTS, safeArea, THEME } from '../lib/layout';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 
 function getCountdownCopy(daysUntilStart) {
   if (daysUntilStart === 1) {
@@ -36,9 +37,14 @@ function getCountdownCopy(daysUntilStart) {
 export default function EventNotStartedScreen({ daysUntilStart, startDate }) {
   const startLabel = startDate ? formatCalendarDate(startDate) : 'pronto';
   const { headline, subline } = getCountdownCopy(daysUntilStart);
+  const reduceMotion = usePrefersReducedMotion();
   const pulse = useSharedValue(1);
 
   useEffect(() => {
+    if (reduceMotion) {
+      pulse.value = 1;
+      return undefined;
+    }
     pulse.value = withRepeat(
       withSequence(
         withTiming(1.06, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
@@ -47,7 +53,8 @@ export default function EventNotStartedScreen({ daysUntilStart, startDate }) {
       -1,
       true
     );
-  }, [pulse]);
+    return undefined;
+  }, [pulse, reduceMotion]);
 
   const heartStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
@@ -55,7 +62,10 @@ export default function EventNotStartedScreen({ daysUntilStart, startDate }) {
 
   return (
     <View style={styles.wrap} accessibilityRole="text">
-      <Animated.View entering={FadeInDown.duration(500).springify()} style={styles.card}>
+      <Animated.View
+        entering={reduceMotion ? undefined : FadeInDown.duration(500).springify()}
+        style={styles.card}
+      >
         <Animated.View style={[styles.iconCircle, heartStyle]}>
           <MaterialIcons name="favorite" size={36} color={THEME.accent} />
         </Animated.View>
@@ -87,7 +97,10 @@ export default function EventNotStartedScreen({ daysUntilStart, startDate }) {
         </Text>
       </Animated.View>
 
-      <Animated.Text entering={FadeInUp.delay(400).duration(600)} style={styles.footer}>
+      <Animated.Text
+        entering={reduceMotion ? undefined : FadeInUp.delay(400).duration(600)}
+        style={styles.footer}
+      >
         Hecho con amor, solo para ti
       </Animated.Text>
     </View>

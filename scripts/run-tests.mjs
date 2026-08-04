@@ -44,7 +44,13 @@ const {
   getBirthdayDate,
   isBeforeEventStart,
 } = await load('lib/calendar.js');
-const { sanitizeStorageKey, isStoragePathAllowedForDay } = await load('lib/storageSanitize.js');
+const { sanitizeStorageKey, isStoragePathAllowedForDay, isAllowedUpload } = await load(
+  'lib/storageSanitize.js'
+);
+const { parseDayNumber, isValidDayNumber } = await load('lib/dayValidation.js');
+const { getSurpriseOrdinal, resolveGiftMessage } = await load('lib/giftSchedule.js');
+const { dayToForm, formToPayload, formsEqual } = await load('screens/admin/dayFormUtils.js');
+const { getPendingSurpriseDayNumbers } = await load('lib/surprisePicks.js');
 
 test('timezone Ecuador definida', () => {
   assert.equal(APP_TIMEZONE, 'America/Guayaquil');
@@ -79,19 +85,16 @@ test('applyGiftScheduleToDays respeta hasGift de BD', () => {
 });
 
 test('pending gifts: filtrar por hasGift + desbloqueados (misma regla que surprisePicks)', () => {
-  const todayNumber = getDaysUntilBirthday(getBirthdayDate(2026));
-  assert.equal(todayNumber, 0);
-  const days = [
-    { dayNumber: 20, hasGift: true },
-    { dayNumber: 10, hasGift: false },
-    { dayNumber: 5, hasGift: true },
-  ];
-  const picks = {};
-  const pending = days
-    .filter((d) => d.hasGift)
-    .map((d) => d.dayNumber)
-    .filter((dayNumber) => dayNumber >= todayNumber && picks[String(dayNumber)] == null)
-    .sort((a, b) => b - a);
+  const birthday = getBirthdayDate(2026);
+  const pending = getPendingSurpriseDayNumbers(
+    {},
+    [
+      { dayNumber: 20, hasGift: true },
+      { dayNumber: 10, hasGift: false },
+      { dayNumber: 5, hasGift: true },
+    ],
+    birthday
+  );
   assert.deepEqual(pending, [20, 5]);
 });
 
@@ -102,6 +105,39 @@ test('sanitizeStorageKey rechaza path traversal', () => {
   assert.equal(isStoragePathAllowedForDay('images/12.jpg', 12), true);
   assert.equal(isStoragePathAllowedForDay('images/11.jpg', 12), false);
   assert.equal(isStoragePathAllowedForDay('photos/day12/a.jpg', 12), true);
+  assert.equal(isAllowedUpload('main', 'image/png', 'x.png'), true);
+  assert.equal(isAllowedUpload('main', 'application/pdf', 'x.pdf'), false);
+});
+
+test('dayValidation parseDayNumber', () => {
+  assert.equal(parseDayNumber('6'), 6);
+  assert.equal(parseDayNumber(0), 0);
+  assert.equal(parseDayNumber(32), null);
+  assert.equal(isValidDayNumber(31), true);
+});
+
+test('gift ordinal + resolveGiftMessage', () => {
+  const days = getScheduledGiftDayNumbers();
+  const first = days[0];
+  assert.equal(getSurpriseOrdinal(first), 1);
+  assert.ok(resolveGiftMessage({ dayNumber: first, giftMessage: 'Hola custom' }).includes('Hola'));
+  assert.ok(resolveGiftMessage({ dayNumber: first }).length > 10);
+});
+
+test('admin dayFormUtils', () => {
+  const form = dayToForm({
+    text: 'hola',
+    has_gift: true,
+    gift_number: 2,
+    gift_message: 'msg',
+    image_path: 'images/1.jpg',
+  });
+  assert.equal(form.has_gift, true);
+  assert.equal(form.gift_number, '2');
+  const payload = formToPayload(form);
+  assert.equal(payload.gift_number, 2);
+  assert.equal(formsEqual(form, form), true);
+  assert.equal(formsEqual(form, { ...form, text: 'x' }), false);
 });
 
 test('timingSafeEqualString', () => {

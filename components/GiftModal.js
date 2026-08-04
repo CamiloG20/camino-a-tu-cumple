@@ -12,13 +12,15 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { GRADIENT_COLORS, THEME } from '../lib/layout';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 
 const CONFETTI = ['🎉', '✨', '🎊', '💖', '⭐', '🎈'];
 
-function ConfettiPiece({ emoji, style }) {
+function ConfettiPiece({ emoji, style, reduceMotion }) {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (reduceMotion) return undefined;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(anim, {
@@ -37,7 +39,7 @@ function ConfettiPiece({ emoji, style }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [anim]);
+  }, [anim, reduceMotion]);
 
   const translateY = anim.interpolate({
     inputRange: [0, 1],
@@ -45,7 +47,9 @@ function ConfettiPiece({ emoji, style }) {
   });
 
   return (
-    <Animated.Text style={[styles.confetti, style, { transform: [{ translateY }] }]}>
+    <Animated.Text
+      style={[styles.confetti, style, reduceMotion ? null : { transform: [{ translateY }] }]}
+    >
       {emoji}
     </Animated.Text>
   );
@@ -59,11 +63,18 @@ export default function GiftModal({
   surpriseTotal = 4,
   onClose,
 }) {
+  const reduceMotion = usePrefersReducedMotion();
   const scale = useRef(new Animated.Value(0.85)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!visible) return undefined;
+
+    if (reduceMotion) {
+      scale.setValue(1);
+      opacity.setValue(1);
+      return undefined;
+    }
 
     Animated.parallel([
       Animated.spring(scale, {
@@ -80,7 +91,7 @@ export default function GiftModal({
     ]).start();
 
     return undefined;
-  }, [visible, scale, opacity]);
+  }, [visible, scale, opacity, reduceMotion]);
 
   const ordinalLabel =
     surpriseOrdinal != null ? `Sorpresa ${surpriseOrdinal} de ${surpriseTotal}` : 'Regalo especial';
@@ -108,6 +119,7 @@ export default function GiftModal({
                     key={emoji}
                     emoji={emoji}
                     style={{ left: `${8 + index * 14}%` }}
+                    reduceMotion={reduceMotion}
                   />
                 ))}
               </View>
