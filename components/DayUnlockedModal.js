@@ -37,7 +37,6 @@ export default function DayUnlockedModal({
     >
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          {/* Gradiente decorativo: pointerEvents none para no bloquear clics en web */}
           <LinearGradient
             colors={GRADIENT_COLORS}
             style={StyleSheet.absoluteFillObject}
@@ -61,20 +60,52 @@ export default function DayUnlockedModal({
               <Text style={styles.primaryText}>Abrir mi sorpresa</Text>
             </Pressable>
 
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Ver después"
-            >
-              <Text style={styles.secondaryText}>Ver después</Text>
-            </Pressable>
+            {Platform.OS === 'web' ? (
+              // Botón nativo: más fiable que Pressable en algunos navegadores
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onClose?.();
+                }}
+                style={webSecondaryBtnStyle}
+                aria-label="Ver después"
+              >
+                Ver después
+              </button>
+            ) : (
+              <Pressable
+                onPress={onClose}
+                style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Ver después"
+              >
+                <Text style={styles.secondaryText}>Ver después</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
     </Modal>
   );
 }
+
+const webSecondaryBtnStyle = {
+  marginTop: 14,
+  paddingTop: 10,
+  paddingBottom: 10,
+  paddingLeft: 16,
+  paddingRight: 16,
+  minHeight: 44,
+  border: 'none',
+  background: 'transparent',
+  color: 'rgba(255,255,255,0.9)',
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
 
 const styles = StyleSheet.create({
   backdrop: {

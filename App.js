@@ -97,6 +97,8 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
   const [daysUntilStart, setDaysUntilStart] = useState(0);
   const [showDayWelcome, setShowDayWelcome] = useState(false);
   const [welcomePayload, setWelcomePayload] = useState(null);
+  /** Tras “Ver después”, no abrir sorpresa/regalo automáticamente. */
+  const [deferAutoSurprise, setDeferAutoSurprise] = useState(false);
   const flatListRef = useRef(null);
   const galleryRef = useRef(null);
   const dayNavTokenRef = useRef(0);
@@ -191,19 +193,26 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   const dismissDayWelcome = useCallback(() => {
     try {
-      markDayWelcomeShown();
+      markDayWelcomeShown(new Date());
     } catch {
       // localStorage puede fallar en modo privado
     }
     setShowDayWelcome(false);
+    setDeferAutoSurprise(true);
   }, []);
 
   const openDayWelcomeSurprise = useCallback(() => {
-    dismissDayWelcome();
+    try {
+      markDayWelcomeShown(new Date());
+    } catch {
+      // ignore
+    }
+    setShowDayWelcome(false);
+    setDeferAutoSurprise(false);
     if (currentDay?.hasGift && todayIndex === realTodayIndex) {
       openGiftOrGame(currentDay);
     }
-  }, [dismissDayWelcome, currentDay, todayIndex, realTodayIndex, openGiftOrGame]);
+  }, [currentDay, todayIndex, realTodayIndex, openGiftOrGame]);
 
   const mustPickSurprise = useMemo(() => {
     if (!surpriseGameDay) return false;
@@ -361,8 +370,12 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     if (shouldShowDayWelcome(new Date(), notificationHour)) {
       setWelcomePayload(getDayWelcomePayload());
       setShowDayWelcome(true);
+      setDeferAutoSurprise(false);
       return;
     }
+
+    // “Ver después”: deja ver el calendario; el regalo se abre al tocar el icono
+    if (deferAutoSurprise) return;
 
     const pending = getPendingSurpriseDayNumbers(surprisePicks, days);
     if (pending.length) {
@@ -385,6 +398,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
     showDayWelcome,
     showSurpriseGame,
     showGiftModal,
+    deferAutoSurprise,
     notificationHour,
     surprisePicks,
     days,
@@ -419,6 +433,7 @@ export default function App({ previewDayNumber = null, adminPreview = false }) {
 
   function handleGiftPress() {
     if (currentDay?.hasGift) {
+      setDeferAutoSurprise(false);
       openGiftOrGame(currentDay);
     }
   }
